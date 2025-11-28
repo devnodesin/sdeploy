@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
@@ -105,7 +106,8 @@ func (h *WebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Trigger deployment asynchronously
 	go func() {
 		if h.deployer != nil {
-			result := h.deployer.Deploy(r.Context(), project, string(triggerSource))
+			// Use a background context since HTTP request context is canceled after response
+			result := h.deployer.Deploy(context.Background(), project, string(triggerSource))
 			if h.logger != nil {
 				if result.Skipped {
 					h.logger.Warnf(project.Name, "Deployment skipped (already in progress)")
