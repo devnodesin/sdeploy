@@ -61,7 +61,7 @@ func (l *Logger) log(level, project, message string) {
 
 	timestamp := time.Now().Format("2006-01-02 15:04:05")
 	logLine := fmt.Sprintf("[%s] [%s] [%s] %s\n", timestamp, level, project, message)
-	l.writer.Write([]byte(logLine))
+	_, _ = l.writer.Write([]byte(logLine))
 }
 
 // Info logs an informational message

@@ -7,7 +7,6 @@ import (
 	"os"
 	"os/exec"
 	"sync"
-	"syscall"
 	"time"
 )
 
@@ -153,7 +152,7 @@ func (d *Deployer) executeCommand(ctx context.Context, project *ProjectConfig, t
 	cmd := exec.CommandContext(ctx, "sh", "-c", project.ExecuteCommand)
 
 	// Set process group so we can kill all child processes
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	setProcessGroup(cmd)
 
 	// Set working directory if configured
 	if project.ExecutePath != "" {
@@ -186,9 +185,7 @@ func (d *Deployer) executeCommand(ctx context.Context, project *ProjectConfig, t
 	select {
 	case <-ctx.Done():
 		// Kill the entire process group
-		if cmd.Process != nil {
-			syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
-		}
+		killProcessGroup(cmd)
 		<-done // Wait for the process to actually exit
 		return stdout.String() + stderr.String(), fmt.Errorf("command timed out after %d seconds", project.TimeoutSeconds)
 	case err := <-done:

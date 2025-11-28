@@ -5,7 +5,6 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -349,28 +348,4 @@ func TestValidateHMAC(t *testing.T) {
 	if validateHMAC(payload, "invalid_format", secret) {
 		t.Error("Expected malformed signature to return false")
 	}
-}
-
-// Helper to create signed request for testing
-func createSignedRequest(t *testing.T, method, url, secret string, body interface{}) *http.Request {
-	var bodyBytes []byte
-	var err error
-	if s, ok := body.(string); ok {
-		bodyBytes = []byte(s)
-	} else {
-		bodyBytes, err = json.Marshal(body)
-		if err != nil {
-			t.Fatalf("Failed to marshal body: %v", err)
-		}
-	}
-
-	req := httptest.NewRequest(method, url, bytes.NewReader(bodyBytes))
-	req.Header.Set("Content-Type", "application/json")
-
-	mac := hmac.New(sha256.New, []byte(secret))
-	mac.Write(bodyBytes)
-	signature := "sha256=" + hex.EncodeToString(mac.Sum(nil))
-	req.Header.Set("X-Hub-Signature-256", signature)
-
-	return req
 }

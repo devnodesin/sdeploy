@@ -99,7 +99,7 @@ func (h *WebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			h.logger.Warnf(project.Name, "Branch mismatch: expected %s, got %s. Skipping.", project.GitBranch, branch)
 		}
 		w.WriteHeader(http.StatusAccepted)
-		w.Write([]byte("Accepted (branch mismatch, skipped)"))
+		_, _ = w.Write([]byte("Accepted (branch mismatch, skipped)"))
 		return
 	}
 
@@ -121,7 +121,7 @@ func (h *WebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}()
 
 	w.WriteHeader(http.StatusAccepted)
-	w.Write([]byte("Accepted"))
+	_, _ = w.Write([]byte("Accepted"))
 }
 
 // authenticate checks request authentication

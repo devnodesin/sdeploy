@@ -33,4 +33,4 @@ go.work.sum
 /temp
 
 # Built binary
-sdeploy
+/sdeploy
