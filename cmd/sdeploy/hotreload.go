@@ -190,8 +190,8 @@ func (cm *ConfigManager) IsReloadPending() bool {
 
 // ProcessPendingReload processes any pending reload (called when deployment completes)
 func (cm *ConfigManager) ProcessPendingReload() {
-	if cm.reloadPending.Load() {
-		cm.reloadPending.Store(false)
+	// Use CompareAndSwap to ensure only one goroutine processes the reload
+	if cm.reloadPending.CompareAndSwap(true, false) {
 		if cm.logger != nil {
 			cm.logger.Info("", "Processing deferred configuration reload")
 		}

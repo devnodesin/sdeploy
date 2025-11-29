@@ -252,8 +252,9 @@ On reload error:
 
 On deferred reload (build in progress):
 ```
-[INFO] Configuration reload deferred: deployment in progress
-[INFO] Configuration reloaded successfully (deferred)
+[INFO] Configuration change detected, reload already pending
+[INFO] Processing deferred configuration reload
+[INFO] Configuration reloaded successfully
 ```
 
 ## 🛡️ Operational Principles
