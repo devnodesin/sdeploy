@@ -786,3 +786,50 @@ func TestGitPullDefaultRunAs(t *testing.T) {
 		t.Errorf("Expected log message 'Run As: www-data:www-data' for git pull (default), got: %s", logOutput)
 	}
 }
+
+// TestGetEffectiveRunAs tests the getEffectiveRunAs helper function
+func TestGetEffectiveRunAs(t *testing.T) {
+	tests := []struct {
+		name       string
+		project    *ProjectConfig
+		wantUser   string
+		wantGroup  string
+	}{
+		{
+			name:      "default when not set",
+			project:   &ProjectConfig{},
+			wantUser:  "www-data",
+			wantGroup: "www-data",
+		},
+		{
+			name:      "custom user and group",
+			project:   &ProjectConfig{RunAsUser: "nginx", RunAsGroup: "www"},
+			wantUser:  "nginx",
+			wantGroup: "www",
+		},
+		{
+			name:      "custom user only",
+			project:   &ProjectConfig{RunAsUser: "deploy"},
+			wantUser:  "deploy",
+			wantGroup: "www-data",
+		},
+		{
+			name:      "custom group only",
+			project:   &ProjectConfig{RunAsGroup: "staff"},
+			wantUser:  "www-data",
+			wantGroup: "staff",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gotUser, gotGroup := getEffectiveRunAs(tt.project)
+			if gotUser != tt.wantUser {
+				t.Errorf("getEffectiveRunAs() user = %v, want %v", gotUser, tt.wantUser)
+			}
+			if gotGroup != tt.wantGroup {
+				t.Errorf("getEffectiveRunAs() group = %v, want %v", gotGroup, tt.wantGroup)
+			}
+		})
+	}
+}

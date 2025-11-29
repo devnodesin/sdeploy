@@ -157,9 +157,9 @@ func (d *Deployer) logBuildConfig(project *ProjectConfig) {
 	)
 }
 
-// handleGitOperations handles git clone/pull based on configuration
-func (d *Deployer) handleGitOperations(ctx context.Context, project *ProjectConfig) error {
-	// Determine user/group for running git commands (same as execute_command)
+// getEffectiveRunAs returns the effective run_as_user and run_as_group for a project
+// If not configured in the project, defaults to www-data:www-data
+func getEffectiveRunAs(project *ProjectConfig) (string, string) {
 	runAsUser := project.RunAsUser
 	if runAsUser == "" {
 		runAsUser = "www-data"
@@ -168,6 +168,13 @@ func (d *Deployer) handleGitOperations(ctx context.Context, project *ProjectConf
 	if runAsGroup == "" {
 		runAsGroup = "www-data"
 	}
+	return runAsUser, runAsGroup
+}
+
+// handleGitOperations handles git clone/pull based on configuration
+func (d *Deployer) handleGitOperations(ctx context.Context, project *ProjectConfig) error {
+	// Get effective user/group for running git commands (same as execute_command)
+	runAsUser, runAsGroup := getEffectiveRunAs(project)
 
 	// Check if local_path exists and is a git repo
 	if !isGitRepo(project.LocalPath) {
@@ -300,15 +307,8 @@ func (d *Deployer) executeCommand(ctx context.Context, project *ProjectConfig, t
 		d.logger.Infof(project.Name, "  Command: %s", project.ExecuteCommand)
 	}
 
-	// Determine user/group for running the command
-	runAsUser := project.RunAsUser
-	if runAsUser == "" {
-		runAsUser = "www-data"
-	}
-	runAsGroup := project.RunAsGroup
-	if runAsGroup == "" {
-		runAsGroup = "www-data"
-	}
+	// Get effective user/group for running the command
+	runAsUser, runAsGroup := getEffectiveRunAs(project)
 
 	// Build the command with user/group support
 	cmd, warning := buildCommand(ctx, project.ExecuteCommand, runAsUser, runAsGroup)
