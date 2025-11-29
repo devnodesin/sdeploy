@@ -457,3 +457,33 @@ func TestDeployBuildConfigLogging(t *testing.T) {
 		t.Errorf("Expected local_path in build config, got: %s", logOutput)
 	}
 }
+
+// TestGetShellPath tests the shell path lookup function
+func TestGetShellPath(t *testing.T) {
+	shellPath := getShellPath()
+
+	// Shell path should not be empty
+	if shellPath == "" {
+		t.Error("Expected getShellPath() to return a non-empty string")
+	}
+
+	// The shell path should be "sh" or contain "sh" (Unix) or "cmd" (Windows)
+	if !strings.Contains(shellPath, "sh") && !strings.Contains(shellPath, "cmd") {
+		t.Errorf("Expected shell path to contain 'sh' or 'cmd', got: %s", shellPath)
+	}
+}
+
+// TestGetShellArgs tests the shell args function
+func TestGetShellArgs(t *testing.T) {
+	args := getShellArgs()
+
+	// Shell args should not be empty
+	if args == "" {
+		t.Error("Expected getShellArgs() to return a non-empty string")
+	}
+
+	// The args should be "-c" (Unix) or "/c" (Windows)
+	if args != "-c" && args != "/c" {
+		t.Errorf("Expected shell args to be '-c' or '/c', got: %s", args)
+	}
+}
