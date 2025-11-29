@@ -703,8 +703,11 @@ func TestDefaultRunAsUserGroup(t *testing.T) {
 // TestBuildCommandFunction tests buildCommand function exists and works
 func TestBuildCommandFunction(t *testing.T) {
 	ctx := context.Background()
-	cmd := buildCommand(ctx, "echo test", "www-data", "www-data")
+	cmd, warning := buildCommand(ctx, "echo test", "www-data", "www-data")
 	if cmd == nil {
 		t.Error("Expected buildCommand to return a non-nil command")
 	}
+	// Warning may or may not be empty depending on whether www-data exists
+	// and whether running as root - we just verify it doesn't panic
+	_ = warning
 }

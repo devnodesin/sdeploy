@@ -1,5 +1,3 @@
-//go:build !windows
-
 package main
 
 import (
@@ -7,7 +5,7 @@ import (
 	"syscall"
 )
 
-// getShutdownSignals returns the signals to listen for graceful shutdown (Unix)
+// getShutdownSignals returns the signals to listen for graceful shutdown
 func getShutdownSignals() []os.Signal {
 	return []os.Signal{syscall.SIGINT, syscall.SIGTERM}
 }

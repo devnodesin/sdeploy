@@ -286,7 +286,10 @@ func (d *Deployer) executeCommand(ctx context.Context, project *ProjectConfig, t
 	}
 
 	// Build the command with user/group support
-	cmd := buildCommand(ctx, project.ExecuteCommand, runAsUser, runAsGroup)
+	cmd, warning := buildCommand(ctx, project.ExecuteCommand, runAsUser, runAsGroup)
+	if warning != "" && d.logger != nil {
+		d.logger.Warnf(project.Name, "%s", warning)
+	}
 
 	// Set process group so we can kill all child processes
 	setProcessGroup(cmd)

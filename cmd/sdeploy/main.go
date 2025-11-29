@@ -119,7 +119,7 @@ func logConfigSummary(logger *Logger, cfg *Config) {
 		logger.Infof("", "Project [%d]: %s", i+1, project.Name)
 		logger.Infof("", "  - Webhook Path: %s", project.WebhookPath)
 		// Print Webhook URL with curl example
-		logger.Infof("", "  - Webhook URL: curl -X POST \"http://localhost:%d%s?secret=%s\" -d '{\"ref\":\"refs/heads/%s\"}'",
+		logger.Infof("", "  - Webhook URL: curl -X POST \"http://<YOUR_HOST>:%d%s?secret=%s\" -d '{\"ref\":\"refs/heads/%s\"}'",
 			cfg.ListenPort, project.WebhookPath, project.WebhookSecret, project.GitBranch)
 		// Order: Git Repo, Git Branch, Git Update, Local Path, Execute Path, Execute Command
 		if project.GitRepo != "" {
