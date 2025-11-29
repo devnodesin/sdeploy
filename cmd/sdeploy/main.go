@@ -49,7 +49,7 @@ func main() {
 	}
 	defer logger.Close()
 
-	logger.Infof(ServiceName, "%s %s - Service started", ServiceName, Version)
+	logger.Infof("", "%s %s - Service started", ServiceName, Version)
 
 	// Log configuration summary
 	logConfigSummary(logger, cfg)
@@ -58,9 +58,9 @@ func main() {
 	var notifier *EmailNotifier
 	if IsEmailConfigValid(cfg.EmailConfig) {
 		notifier = NewEmailNotifier(cfg.EmailConfig, logger)
-		logger.Info(ServiceName, "Email notifications enabled")
+		logger.Info("", "Email notifications enabled")
 	} else {
-		logger.Info(ServiceName, "Email notification disabled: email_config is missing or invalid.")
+		logger.Info("", "Email notification disabled: email_config is missing or invalid.")
 	}
 
 	// Initialize deployer
@@ -83,57 +83,71 @@ func main() {
 	}
 
 	go func() {
-		logger.Infof(ServiceName, "Server starting on %s", addr)
+		logger.Infof("", "Server starting on %s", addr)
 		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			logger.Errorf(ServiceName, "Server error: %v", err)
+			logger.Errorf("", "Server error: %v", err)
 			os.Exit(1)
 		}
 	}()
 
 	// Wait for shutdown signal
 	sig := <-sigChan
-	logger.Infof(ServiceName, "Received signal %v, shutting down...", sig)
+	logger.Infof("", "Received signal %v, shutting down...", sig)
 
 	// Graceful shutdown
 	if err := server.Close(); err != nil {
-		logger.Errorf(ServiceName, "Error during shutdown: %v", err)
+		logger.Errorf("", "Error during shutdown: %v", err)
 	}
 
-	logger.Infof(ServiceName, "%s %s - Service terminated", ServiceName, Version)
+	logger.Infof("", "%s %s - Service terminated", ServiceName, Version)
 }
 
 // logConfigSummary logs all configuration settings on startup
 func logConfigSummary(logger *Logger, cfg *Config) {
-	logger.Info(ServiceName, "Configuration loaded:")
-	logger.Infof(ServiceName, "  Listen Port: %d", cfg.ListenPort)
+	logger.Info("", "Configuration loaded:")
+	logger.Infof("", "  Listen Port: %d", cfg.ListenPort)
 	if cfg.LogFilepath != "" {
-		logger.Infof(ServiceName, "  Log File: %s", cfg.LogFilepath)
+		logger.Infof("", "  Log File: %s", cfg.LogFilepath)
 	}
 	if IsEmailConfigValid(cfg.EmailConfig) {
-		logger.Info(ServiceName, "  Email Notifications: enabled")
+		logger.Info("", "  Email Notifications: enabled")
 	} else {
-		logger.Info(ServiceName, "  Email Notifications: disabled")
+		logger.Info("", "  Email Notifications: disabled")
 	}
 
 	for i, project := range cfg.Projects {
-		logger.Infof(ServiceName, "Project [%d]: %s", i+1, project.Name)
-		logger.Infof(ServiceName, "  - Webhook Path: %s", project.WebhookPath)
-		if project.LocalPath != "" {
-			logger.Infof(ServiceName, "  - Local Path: %s", project.LocalPath)
-		}
+		logger.Infof("", "Project [%d]: %s", i+1, project.Name)
+		logger.Infof("", "  - Webhook Path: %s", project.WebhookPath)
+		// Print Webhook URL with curl example
+		logger.Infof("", "  - Webhook URL: curl -X POST \"http://<YOUR_HOST>:%d%s?secret=%s\" -d '{\"ref\":\"refs/heads/%s\"}'",
+			cfg.ListenPort, project.WebhookPath, project.WebhookSecret, project.GitBranch)
+		// Order: Git Repo, Git Branch, Git Update, Local Path, Execute Path, Execute Command
 		if project.GitRepo != "" {
-			logger.Infof(ServiceName, "  - Git Repo: %s", project.GitRepo)
+			logger.Infof("", "  - Git Repo: %s", project.GitRepo)
 		}
-		logger.Infof(ServiceName, "  - Git Branch: %s", project.GitBranch)
-		logger.Infof(ServiceName, "  - Git Update: %t", project.GitUpdate)
+		logger.Infof("", "  - Git Branch: %s", project.GitBranch)
+		logger.Infof("", "  - Git Update: %t", project.GitUpdate)
+		if project.LocalPath != "" {
+			logger.Infof("", "  - Local Path: %s", project.LocalPath)
+		}
 		if project.ExecutePath != "" {
-			logger.Infof(ServiceName, "  - Execute Path: %s", project.ExecutePath)
+			logger.Infof("", "  - Execute Path: %s", project.ExecutePath)
 		}
-		logger.Infof(ServiceName, "  - Execute Command: %s", project.ExecuteCommand)
+		logger.Infof("", "  - Execute Command: %s", project.ExecuteCommand)
+		// Show run as user/group if configured
+		runAsUser := project.RunAsUser
+		if runAsUser == "" {
+			runAsUser = "www-data"
+		}
+		runAsGroup := project.RunAsGroup
+		if runAsGroup == "" {
+			runAsGroup = "www-data"
+		}
+		logger.Infof("", "  - Run As: %s:%s", runAsUser, runAsGroup)
 		if project.TimeoutSeconds > 0 {
-			logger.Infof(ServiceName, "  - Timeout: %ds", project.TimeoutSeconds)
+			logger.Infof("", "  - Timeout: %ds", project.TimeoutSeconds)
 		}
-		logger.Infof(ServiceName, "  - Email Recipients: %d", len(project.EmailRecipients))
+		logger.Infof("", "  - Email Recipients: %d", len(project.EmailRecipients))
 	}
 }
 

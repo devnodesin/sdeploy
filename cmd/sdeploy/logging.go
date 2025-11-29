@@ -60,7 +60,13 @@ func (l *Logger) log(level, project, message string) {
 	defer l.mu.Unlock()
 
 	timestamp := time.Now().Format("2006-01-02 15:04:05")
-	logLine := fmt.Sprintf("[%s] [%s] [%s] %s\n", timestamp, level, project, message)
+	var logLine string
+	if project == "" {
+		// No project specified, use simpler format without empty brackets
+		logLine = fmt.Sprintf("[%s] [%s] %s\n", timestamp, level, message)
+	} else {
+		logLine = fmt.Sprintf("[%s] [%s] [%s] %s\n", timestamp, level, project, message)
+	}
 	_, _ = l.writer.Write([]byte(logLine))
 }
 

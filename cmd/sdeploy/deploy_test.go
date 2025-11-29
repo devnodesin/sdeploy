@@ -543,3 +543,171 @@ func TestDeploySuccessOutputLogging(t *testing.T) {
 		t.Errorf("Expected log to contain build output, got: %s", logOutput)
 	}
 }
+
+// TestDeployLogOrderOutputBeforeCompleted tests that command output is logged BEFORE "Deployment completed"
+func TestDeployLogOrderOutputBeforeCompleted(t *testing.T) {
+	var buf bytes.Buffer
+	logger := NewLogger(&buf, "")
+	deployer := NewDeployer(logger)
+
+	project := &ProjectConfig{
+		Name:           "TestProject",
+		WebhookPath:    "/hooks/test",
+		ExecuteCommand: "echo 'test output message'",
+	}
+
+	result := deployer.Deploy(context.Background(), project, "WEBHOOK")
+	if !result.Success {
+		t.Errorf("Expected deployment to succeed, got error: %s", result.Error)
+	}
+
+	logOutput := buf.String()
+
+	// Find positions of "Command output" and "Deployment completed"
+	outputPos := strings.Index(logOutput, "Command output:")
+	completedPos := strings.Index(logOutput, "Deployment completed")
+
+	if outputPos == -1 {
+		t.Error("Expected log to contain 'Command output:'")
+	}
+	if completedPos == -1 {
+		t.Error("Expected log to contain 'Deployment completed'")
+	}
+
+	// Command output should appear BEFORE "Deployment completed"
+	if outputPos >= completedPos {
+		t.Errorf("Expected 'Command output:' to appear BEFORE 'Deployment completed' in logs.\nLog output:\n%s", logOutput)
+	}
+}
+
+// TestDeployExecuteCommandLogging tests that execute command and path are logged
+func TestDeployExecuteCommandLogging(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	var buf bytes.Buffer
+	logger := NewLogger(&buf, "")
+	deployer := NewDeployer(logger)
+
+	project := &ProjectConfig{
+		Name:           "TestProject",
+		WebhookPath:    "/hooks/test",
+		ExecutePath:    tmpDir,
+		ExecuteCommand: "echo test",
+	}
+
+	result := deployer.Deploy(context.Background(), project, "WEBHOOK")
+	if !result.Success {
+		t.Errorf("Expected deployment to succeed, got error: %s", result.Error)
+	}
+
+	logOutput := buf.String()
+
+	// Should log "Executing command:"
+	if !strings.Contains(logOutput, "Executing command:") {
+		t.Errorf("Expected log to contain 'Executing command:', got: %s", logOutput)
+	}
+
+	// Should log "Path:"
+	if !strings.Contains(logOutput, "Path:") {
+		t.Errorf("Expected log to contain 'Path:', got: %s", logOutput)
+	}
+
+	// Should log "Command:"
+	if !strings.Contains(logOutput, "Command:") {
+		t.Errorf("Expected log to contain 'Command:', got: %s", logOutput)
+	}
+
+	// Should log the actual execute path
+	if !strings.Contains(logOutput, tmpDir) {
+		t.Errorf("Expected log to contain execute path '%s', got: %s", tmpDir, logOutput)
+	}
+}
+
+// TestRunAsUserGroupConfig tests run_as_user and run_as_group configuration
+func TestRunAsUserGroupConfig(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.json")
+
+	// Config with run_as_user and run_as_group
+	configWithRunAs := `{
+		"listen_port": 8080,
+		"projects": [
+			{
+				"name": "Frontend",
+				"webhook_path": "/hooks/frontend",
+				"webhook_secret": "secret_token_123",
+				"execute_command": "sh deploy.sh",
+				"run_as_user": "nobody",
+				"run_as_group": "nogroup"
+			}
+		]
+	}`
+
+	err := os.WriteFile(configPath, []byte(configWithRunAs), 0644)
+	if err != nil {
+		t.Fatalf("Failed to create test config file: %v", err)
+	}
+
+	cfg, err := LoadConfig(configPath)
+	if err != nil {
+		t.Fatalf("LoadConfig failed: %v", err)
+	}
+
+	project := cfg.Projects[0]
+	if project.RunAsUser != "nobody" {
+		t.Errorf("Expected RunAsUser 'nobody', got '%s'", project.RunAsUser)
+	}
+	if project.RunAsGroup != "nogroup" {
+		t.Errorf("Expected RunAsGroup 'nogroup', got '%s'", project.RunAsGroup)
+	}
+}
+
+// TestDefaultRunAsUserGroup tests default run_as_user and run_as_group values
+func TestDefaultRunAsUserGroup(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.json")
+
+	// Config without run_as_user and run_as_group
+	configNoRunAs := `{
+		"listen_port": 8080,
+		"projects": [
+			{
+				"name": "Frontend",
+				"webhook_path": "/hooks/frontend",
+				"webhook_secret": "secret_token_123",
+				"execute_command": "sh deploy.sh"
+			}
+		]
+	}`
+
+	err := os.WriteFile(configPath, []byte(configNoRunAs), 0644)
+	if err != nil {
+		t.Fatalf("Failed to create test config file: %v", err)
+	}
+
+	cfg, err := LoadConfig(configPath)
+	if err != nil {
+		t.Fatalf("LoadConfig failed: %v", err)
+	}
+
+	project := cfg.Projects[0]
+	// RunAsUser and RunAsGroup should be empty strings in config, defaults are applied at runtime
+	if project.RunAsUser != "" {
+		t.Errorf("Expected RunAsUser to be empty string (defaults applied at runtime), got '%s'", project.RunAsUser)
+	}
+	if project.RunAsGroup != "" {
+		t.Errorf("Expected RunAsGroup to be empty string (defaults applied at runtime), got '%s'", project.RunAsGroup)
+	}
+}
+
+// TestBuildCommandFunction tests buildCommand function exists and works
+func TestBuildCommandFunction(t *testing.T) {
+	ctx := context.Background()
+	cmd, warning := buildCommand(ctx, "echo test", "www-data", "www-data")
+	if cmd == nil {
+		t.Error("Expected buildCommand to return a non-nil command")
+	}
+	// Warning may or may not be empty depending on whether www-data exists
+	// and whether running as root - we just verify it doesn't panic
+	_ = warning
+}

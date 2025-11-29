@@ -118,8 +118,9 @@ func (d *Deployer) Deploy(ctx context.Context, project *ProjectConfig, triggerSo
 	} else {
 		result.Success = true
 		if d.logger != nil {
-			d.logger.Infof(project.Name, "Deployment completed in %v", result.Duration())
+			// Log command output BEFORE "Deployment completed" message
 			d.logCommandOutput(project.Name, output, false)
+			d.logger.Infof(project.Name, "Deployment completed in %v", result.Duration())
 		}
 	}
 
@@ -210,13 +211,20 @@ func isGitRepo(path string) bool {
 
 // gitClone clones a git repository to the specified local path
 func (d *Deployer) gitClone(ctx context.Context, repoURL, localPath, branch string) error {
+	gitCmd := fmt.Sprintf("git clone --branch %s %s %s", branch, repoURL, localPath)
 	if d.logger != nil {
-		d.logger.Infof("Git", "Cloning %s to %s (branch: %s)", repoURL, localPath, branch)
+		d.logger.Infof("Git", "Running: %s", gitCmd)
+		d.logger.Infof("Git", "Path: (current directory)")
 	}
 
 	// Clone the repository with specific branch
 	cmd := exec.CommandContext(ctx, "git", "clone", "--branch", branch, repoURL, localPath)
 	output, err := cmd.CombinedOutput()
+	
+	if d.logger != nil && len(output) > 0 {
+		d.logger.Infof("Git", "Output: %s", strings.TrimSpace(string(output)))
+	}
+	
 	if err != nil {
 		return fmt.Errorf("%v: %s", err, string(output))
 	}
@@ -227,19 +235,21 @@ func (d *Deployer) gitClone(ctx context.Context, repoURL, localPath, branch stri
 // gitPull executes git pull in the project's local path
 func (d *Deployer) gitPull(ctx context.Context, project *ProjectConfig) error {
 	if d.logger != nil {
-		d.logger.Infof(project.Name, "Executing git pull in %s", project.LocalPath)
+		d.logger.Infof(project.Name, "Running: git pull")
+		d.logger.Infof(project.Name, "Path: %s", project.LocalPath)
 	}
 
 	cmd := exec.CommandContext(ctx, "git", "pull")
 	cmd.Dir = project.LocalPath
 
 	output, err := cmd.CombinedOutput()
+	
+	if d.logger != nil && len(output) > 0 {
+		d.logger.Infof(project.Name, "Output: %s", strings.TrimSpace(string(output)))
+	}
+	
 	if err != nil {
 		return fmt.Errorf("%v: %s", err, string(output))
-	}
-
-	if d.logger != nil {
-		d.logger.Infof(project.Name, "Git pull output: %s", string(output))
 	}
 
 	return nil
@@ -254,7 +264,32 @@ func (d *Deployer) executeCommand(ctx context.Context, project *ProjectConfig, t
 		defer cancel()
 	}
 
-	cmd := exec.CommandContext(ctx, getShellPath(), getShellArgs(), project.ExecuteCommand)
+	// Log the command being executed with path
+	executePath := project.ExecutePath
+	if executePath == "" {
+		executePath = "."
+	}
+	if d.logger != nil {
+		d.logger.Infof(project.Name, "Executing command:")
+		d.logger.Infof(project.Name, "  Path: %s", executePath)
+		d.logger.Infof(project.Name, "  Command: %s", project.ExecuteCommand)
+	}
+
+	// Determine user/group for running the command
+	runAsUser := project.RunAsUser
+	if runAsUser == "" {
+		runAsUser = "www-data"
+	}
+	runAsGroup := project.RunAsGroup
+	if runAsGroup == "" {
+		runAsGroup = "www-data"
+	}
+
+	// Build the command with user/group support
+	cmd, warning := buildCommand(ctx, project.ExecuteCommand, runAsUser, runAsGroup)
+	if warning != "" && d.logger != nil {
+		d.logger.Warnf(project.Name, "%s", warning)
+	}
 
 	// Set process group so we can kill all child processes
 	setProcessGroup(cmd)

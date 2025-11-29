@@ -177,10 +177,15 @@ func TestLoggerEmptyProject(t *testing.T) {
 	logger.Info("", "message without project")
 
 	output := buf.String()
-	if !strings.Contains(output, "[]") {
-		// Empty project should still have brackets but empty
-		if !strings.Contains(output, "message without project") {
-			t.Error("Expected log output to contain the message")
-		}
+	// Empty project should omit the project brackets entirely
+	if strings.Contains(output, "[]") {
+		t.Error("Expected log output to NOT contain empty brackets '[]'")
+	}
+	if !strings.Contains(output, "message without project") {
+		t.Error("Expected log output to contain the message")
+	}
+	// Should have format: [TIMESTAMP] [LEVEL] message
+	if !strings.Contains(output, "[INFO] message without project") {
+		t.Errorf("Expected format '[INFO] message', got: %s", output)
 	}
 }

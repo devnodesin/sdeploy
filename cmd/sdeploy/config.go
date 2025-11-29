@@ -28,6 +28,8 @@ type ProjectConfig struct {
 	GitUpdate       bool     `json:"git_update"`
 	TimeoutSeconds  int      `json:"timeout_seconds"`
 	EmailRecipients []string `json:"email_recipients"`
+	RunAsUser       string   `json:"run_as_user"`  // User to run commands as (default: www-data)
+	RunAsGroup      string   `json:"run_as_group"` // Group to run commands as (default: www-data)
 }
 
 // Config holds the complete SDeploy configuration
