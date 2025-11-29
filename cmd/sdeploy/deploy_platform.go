@@ -51,43 +51,40 @@ func getShellArgs() string {
 // or falls back to running as current user if user lookup fails
 // Returns the command and a warning message (empty if no warning)
 func buildCommand(ctx context.Context, command, runAsUser, runAsGroup string) (*exec.Cmd, string) {
+	defaultCmd := exec.CommandContext(ctx, getShellPath(), getShellArgs(), command)
+
 	// Check if we're running as root
 	currentUser, err := user.Current()
 	if err != nil {
 		// Can't determine current user, run command directly
-		return exec.CommandContext(ctx, getShellPath(), getShellArgs(), command),
-			"Unable to determine current user, running command as current user"
+		return defaultCmd, "Unable to determine current user, running command as current user"
 	}
 	if currentUser.Uid != "0" {
 		// Not running as root, run command directly (no warning, this is normal)
-		return exec.CommandContext(ctx, getShellPath(), getShellArgs(), command), ""
+		return defaultCmd, ""
 	}
 
 	// Running as root, attempt to run as specified user/group
 	targetUser, err := user.Lookup(runAsUser)
 	if err != nil {
 		// User not found, run command directly as current user (root)
-		return exec.CommandContext(ctx, getShellPath(), getShellArgs(), command),
-			"User '" + runAsUser + "' not found, running command as root"
+		return defaultCmd, "User '" + runAsUser + "' not found, running command as root"
 	}
 
 	targetGroup, err := user.LookupGroup(runAsGroup)
 	if err != nil {
 		// Group not found, run command directly as current user (root)
-		return exec.CommandContext(ctx, getShellPath(), getShellArgs(), command),
-			"Group '" + runAsGroup + "' not found, running command as root"
+		return defaultCmd, "Group '" + runAsGroup + "' not found, running command as root"
 	}
 
 	uid, err := strconv.ParseUint(targetUser.Uid, 10, 32)
 	if err != nil {
-		return exec.CommandContext(ctx, getShellPath(), getShellArgs(), command),
-			"Invalid UID for user '" + runAsUser + "', running command as root"
+		return defaultCmd, "Invalid UID for user '" + runAsUser + "', running command as root"
 	}
 
 	gid, err := strconv.ParseUint(targetGroup.Gid, 10, 32)
 	if err != nil {
-		return exec.CommandContext(ctx, getShellPath(), getShellArgs(), command),
-			"Invalid GID for group '" + runAsGroup + "', running command as root"
+		return defaultCmd, "Invalid GID for group '" + runAsGroup + "', running command as root"
 	}
 
 	cmd := exec.CommandContext(ctx, getShellPath(), getShellArgs(), command)
