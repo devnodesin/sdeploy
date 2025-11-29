@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 )
@@ -112,8 +113,8 @@ func (d *Deployer) Deploy(ctx context.Context, project *ProjectConfig, triggerSo
 		result.Error = err.Error()
 		if d.logger != nil {
 			d.logger.Errorf(project.Name, "Deployment failed: %v", err)
-			if output != "" {
-				d.logger.Errorf(project.Name, "Command output: %s", output)
+			if trimmedOutput := strings.TrimSpace(output); trimmedOutput != "" {
+				d.logger.Errorf(project.Name, "Command output: %s", trimmedOutput)
 			}
 		}
 	} else {
