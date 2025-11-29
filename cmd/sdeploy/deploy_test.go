@@ -84,7 +84,9 @@ func TestDeployGitPull(t *testing.T) {
 
 	// Initialize a bare git repo for testing
 	gitPath := filepath.Join(tmpDir, "repo")
-	os.MkdirAll(gitPath, 0755)
+	if err := os.MkdirAll(gitPath, 0755); err != nil {
+		t.Fatalf("Failed to create git path: %v", err)
+	}
 
 	// Create a simple script that echoes git pull
 	var buf bytes.Buffer

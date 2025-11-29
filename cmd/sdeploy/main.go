@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"syscall"
 )
 
 func main() {
@@ -67,7 +66,7 @@ func main() {
 
 	// Set up signal handling for graceful shutdown
 	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+	signal.Notify(sigChan, getShutdownSignals()...)
 
 	// Start HTTP server in goroutine
 	addr := fmt.Sprintf(":%d", cfg.ListenPort)
