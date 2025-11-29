@@ -237,7 +237,7 @@ func (d *Deployer) executeCommand(ctx context.Context, project *ProjectConfig, t
 		defer cancel()
 	}
 
-	cmd := exec.CommandContext(ctx, "sh", "-c", project.ExecuteCommand)
+	cmd := exec.CommandContext(ctx, "/bin/sh", "-c", project.ExecuteCommand)
 
 	// Set process group so we can kill all child processes
 	setProcessGroup(cmd)
