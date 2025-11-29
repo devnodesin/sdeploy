@@ -126,7 +126,7 @@ SDeploy searches for its config file in order:
       "webhook_path": "/hooks/frontend",
       "webhook_secret": "secret_token_for_frontend_repo",
       "git_repo": "git@github.com:myorg/frontend-app.git",
-      "git_path": "/var/repo/frontend-repo",
+      "local_path": "/var/repo/frontend-repo",
       "execute_path": "/var/www/site",
       "git_branch": "main",
       "execute_command": "sh /var/www/site/deploy.sh",
@@ -138,7 +138,7 @@ SDeploy searches for its config file in order:
       "webhook_path": "/hooks/api-service",
       "webhook_secret": "api_prod_key_777",
       "git_repo": "https://gitlab.com/api/backend-service.git",
-      "git_path": "/opt/repo/api-repo",
+      "local_path": "/opt/repo/api-repo",
       "execute_path": "/opt/services/api",
       "git_branch": "staging",
       "execute_command": "/usr/bin/supervisorctl restart api-service",
@@ -159,6 +159,11 @@ SDeploy searches for its config file in order:
 | smtp_pass    | Password or API key for SMTP                |
 | email_sender | Sender email address                        |
 
+**Email Notification Behavior:**
+- If `email_config` is absent or any required field (`smtp_host`, `smtp_port`, `smtp_user`, `smtp_pass`, `email_sender`) is missing/invalid, email notifications are **globally disabled**.
+- When disabled, a log message is recorded: `"Email notification disabled: email_config is missing or invalid."`
+- Per-project: If `email_recipients` is absent or empty for a project, email notifications are **disabled for that project only**.
+
 ### Project Configuration
 
 | Key               | Description                                               |
@@ -166,14 +171,20 @@ SDeploy searches for its config file in order:
 | name              | Human-readable project identifier                         |
 | webhook_path      | Unique URI path (e.g., /hooks/api)                       |
 | webhook_secret    | Secret key for webhook authentication                     |
-| git_repo          | Git repository URL (SSH/HTTPS)                            |
-| git_path          | Local directory for git operations                        |
+| git_repo          | (Optional) Git repository URL (SSH/HTTPS). If absent or empty, no git clone/pull is performed. |
+| local_path        | Local directory for git operations or local project path  |
 | execute_path      | Directory for deployment script execution                 |
-| git_branch        | Branch required to trigger deployment                     |
+| git_branch        | (Optional) Branch required to trigger deployment. Default: `main` |
 | execute_command   | Shell command to execute                                  |
-| git_update        | If true, run `git pull` before deployment                 |
+| git_update        | (Optional) If true, run `git pull` before deployment. Default: `false` |
 | timeout_seconds   | (Optional) Hard timeout for command execution             |
-| email_recipients  | (Optional) Array of notification email addresses          |
+| email_recipients  | (Optional) Array of notification email addresses. If absent or empty, email notifications are disabled for this project. |
+
+**Git Behavior:**
+- `git_branch`: If not set, defaults to `main`.
+- `git_update`: If not set, defaults to `false` (no automatic `git pull`).
+- `git_repo`: If absent or empty, **no git clone or pull is performed**. The `local_path` is treated as a local directory (either an existing local repo or a non-git directory) and only the build/execute commands are run.
+- **Clone Logic:** If `git_repo` is set and the repo is not already cloned at `local_path`, it will be cloned. If already cloned, skip cloning.
 
 ## 🛠️ Key Features
 
@@ -182,11 +193,15 @@ SDeploy searches for its config file in order:
 - **Authentication (HMAC & Secret Fallback):** Prioritize HMAC signature (`X-Hub-Signature`). If missing, fallback to secret in URL query.
 - **Branch Verification:** Ensures webhook payload branch matches configured branch.
 - **Asynchronous Deployment:** Valid requests trigger deployment in background, respond `202 Accepted`.
-- **Git Update Control:** If `git_update` is true, run `git pull` before deployment.
+- **Git Update Control:** If `git_update` is true, run `git pull` before deployment (default: `false`).
+- **Git Clone Control:** If `git_repo` is set and repo not already cloned, clone it. If already cloned, skip cloning.
+- **Local Directory Support:** If `git_repo` is absent/empty, treat `local_path` as a local directory and skip all git operations.
 - **Robust Execution:** Runs shell command in specified directory.
 - **Environment Variable Injection:** Injects project details (e.g., `SDEPLOY_PROJECT_NAME`, `SDEPLOY_TRIGGER_SOURCE`) into deployment environment.
 - **Comprehensive Logging:** Logs start/end time, output, status, to stdout/stderr or log file.
-- **Email Notification:** On completion, sends summary email if configured.
+- **Startup Logging:** On daemon start, print all global settings and project configurations to the log file.
+- **Per-Build Logging:** For each build/deployment, print the project configuration in the log.
+- **Email Notification:** On completion, sends summary email if configured (disabled if `email_config` is missing/invalid or `email_recipients` is empty).
 
 ## 🛡️ Operational Principles
 
@@ -199,14 +214,20 @@ SDeploy searches for its config file in order:
 
 ## 📐 Execution Flow
 
-1. **Request Entry:** Webhook POST received.
-2. **Validation (Security):** Check HMAC signature. If valid, trigger is WEBHOOK. If absent, check secret query parameter for INTERNAL trigger.
-3. **Validation (Logic):** Verify git branch (for WEBHOOK).
-4. **Lock Check:** If deployment lock held, log "Skipped" and return 202. If not, acquire lock and proceed.
-5. **Asynchronous Trigger:** Start deployment in background, return 202.
-6. **Pre-Execution (Git Update):** If `git_update`, run `git pull`.
-7. **Execution:** Run `execute_command` in `execute_path` (with timeout, env vars).
-8. **Cleanup & Notify:** Log result, send email notification, release lock.
+1. **Daemon Startup:** Log all global settings and project configurations to the log file.
+2. **Request Entry:** Webhook POST received.
+3. **Validation (Security):** Check HMAC signature. If valid, trigger is WEBHOOK. If absent, check secret query parameter for INTERNAL trigger.
+4. **Validation (Logic):** Verify git branch (for WEBHOOK). Use `git_branch` from config, or default to `main` if not set.
+5. **Lock Check:** If deployment lock held, log "Skipped" and return 202. If not, acquire lock and proceed.
+6. **Asynchronous Trigger:** Start deployment in background, return 202.
+7. **Log Project Config:** Print the project configuration in the log for this build.
+8. **Pre-Execution (Git Operations):**
+   - If `git_repo` is absent or empty: Skip all git operations. Treat `local_path` as a local directory (existing repo or non-git directory).
+   - If `git_repo` is set and repo not cloned at `local_path`: Clone the repo.
+   - If `git_repo` is set and repo already cloned: Skip cloning.
+   - If `git_update` is `true` (default: `false`): Run `git pull`.
+9. **Execution:** Run `execute_command` in `execute_path` (with timeout, env vars).
+10. **Cleanup & Notify:** Log result, send email notification (if `email_config` valid and `email_recipients` not empty), release lock.
 
 ## 🌐 Integration with Reverse Proxies
 

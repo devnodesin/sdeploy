@@ -4,78 +4,63 @@
 
 - Go 1.24+ (or Docker)
 
-## Build
+## Build & Test
+
+### Standard Build
 
 ```sh
 go mod tidy
 go build -o sdeploy ./cmd/sdeploy
-```
-
-**Using Docker:**
-```sh
-docker run --rm -v "$(pwd):/app" -w /app golang:latest \
-  sh -c "go mod tidy && go build -buildvcs=false -o sdeploy ./cmd/sdeploy"
-```
-
-## Test
-
-```sh
 go test ./cmd/sdeploy/...
 ```
 
-**Using Docker:**
+### Build with Docker
+
 ```sh
+docker run --rm -v "$(pwd):/app" -w /app golang:latest \
+  sh -c "go mod tidy && go build -buildvcs=false -o sdeploy ./cmd/sdeploy"
+
+## Run Test
 docker run --rm -v "$(pwd):/app" -w /app golang:latest \
   sh -c "go test ./cmd/sdeploy/..."
 ```
 
 ## Run
 
-**Console mode:**
 ```sh
+## Console mode:
 ./sdeploy -c config.json
-```
 
-**Daemon mode:**
-```sh
+## Daemon mode:
+
 ./sdeploy -c config.json -d
 ```
 
 ## Install as systemd Service
 
 1. Copy binary:
-   ```sh
-   sudo cp sdeploy /usr/local/bin/
-   ```
+
+```sh
+sudo cp sdeploy /usr/local/bin/
+```
 
 2. Create config:
-   ```sh
-   sudo mkdir -p /etc/sdeploy
-   sudo cp samples/config.json /etc/sdeploy/config.json
-   # Edit config as needed
-   ```
 
-3. Create service file `/etc/systemd/system/sdeploy.service`:
-   ```ini
-   [Unit]
-   Description=SDeploy Webhook Daemon
-   After=network.target
+```sh
+sudo mkdir -p /etc/sdeploy
+sudo cp samples/config.json /etc/sdeploy/config.json
+# Edit config as needed
 
-   [Service]
-   Type=simple
-   ExecStart=/usr/local/bin/sdeploy -d
-   Restart=always
+sudo cp samples/sdeploy.service /etc/systemd/system/sdeploy.service
+```
 
-   [Install]
-   WantedBy=multi-user.target
-   ```
+3. Enable and start:
 
-4. Enable and start:
-   ```sh
-   sudo systemctl daemon-reload
-   sudo systemctl enable sdeploy
-   sudo systemctl start sdeploy
-   ```
+```sh
+sudo systemctl daemon-reload
+sudo systemctl enable sdeploy
+sudo systemctl start sdeploy
+```
 
 ## Verify
 

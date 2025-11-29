@@ -10,15 +10,15 @@
   },
   "projects": [
     {
-      "name": "My Web App",
-      "webhook_path": "/hooks/webapp",
+      "name": "SDeploy Test Project",
+      "webhook_path": "/hooks/sdeploy-test",
       "webhook_secret": "your_webhook_secret_here",
-      "git_repo": "git@github.com:yourorg/webapp.git",
-      "git_path": "/var/repo/webapp",
-      "execute_path": "/var/www/webapp",
+      "git_repo": "https://github.com/devnodesin/sdeploy-test.git",
+      "local_path": "/var/repo/sdeploy-test",
       "git_branch": "main",
-      "execute_command": "sh deploy.sh",
       "git_update": true,
+      "execute_path": "/var/repo/sdeploy-test",
+      "execute_command": "sh build.sh",
       "timeout_seconds": 300,
       "email_recipients": ["team@example.com"]
     }
