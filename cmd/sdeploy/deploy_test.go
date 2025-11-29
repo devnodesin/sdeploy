@@ -711,3 +711,125 @@ func TestBuildCommandFunction(t *testing.T) {
 	// and whether running as root - we just verify it doesn't panic
 	_ = warning
 }
+
+// TestGitPullRunAsLogging tests that git pull logs the Run As user/group
+func TestGitPullRunAsLogging(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create a .git directory to simulate an already cloned repo
+	gitDir := filepath.Join(tmpDir, ".git")
+	if err := os.MkdirAll(gitDir, 0755); err != nil {
+		t.Fatalf("Failed to create .git directory: %v", err)
+	}
+
+	var buf bytes.Buffer
+	logger := NewLogger(&buf, "")
+	deployer := NewDeployer(logger)
+
+	project := &ProjectConfig{
+		Name:           "TestProject",
+		WebhookPath:    "/hooks/test",
+		GitRepo:        "https://github.com/example/repo.git",
+		LocalPath:      tmpDir,
+		GitBranch:      "main",
+		GitUpdate:      true, // Enable git pull
+		ExecutePath:    tmpDir,
+		ExecuteCommand: "echo done",
+		RunAsUser:      "testuser",
+		RunAsGroup:     "testgroup",
+	}
+
+	// Deploy will fail on git pull (not a real git repo), but we can verify the logging
+	deployer.Deploy(context.Background(), project, "WEBHOOK")
+
+	logOutput := buf.String()
+
+	// Should see "Run As:" logging for git pull
+	if !strings.Contains(logOutput, "Run As: testuser:testgroup") {
+		t.Errorf("Expected log message 'Run As: testuser:testgroup' for git pull, got: %s", logOutput)
+	}
+}
+
+// TestGitPullDefaultRunAs tests that git pull uses default www-data:www-data when not configured
+func TestGitPullDefaultRunAs(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create a .git directory to simulate an already cloned repo
+	gitDir := filepath.Join(tmpDir, ".git")
+	if err := os.MkdirAll(gitDir, 0755); err != nil {
+		t.Fatalf("Failed to create .git directory: %v", err)
+	}
+
+	var buf bytes.Buffer
+	logger := NewLogger(&buf, "")
+	deployer := NewDeployer(logger)
+
+	project := &ProjectConfig{
+		Name:           "TestProject",
+		WebhookPath:    "/hooks/test",
+		GitRepo:        "https://github.com/example/repo.git",
+		LocalPath:      tmpDir,
+		GitBranch:      "main",
+		GitUpdate:      true, // Enable git pull
+		ExecutePath:    tmpDir,
+		ExecuteCommand: "echo done",
+		// RunAsUser and RunAsGroup are not set, should default to www-data:www-data
+	}
+
+	// Deploy will fail on git pull (not a real git repo), but we can verify the logging
+	deployer.Deploy(context.Background(), project, "WEBHOOK")
+
+	logOutput := buf.String()
+
+	// Should see default "Run As: www-data:www-data" logging for git pull
+	if !strings.Contains(logOutput, "Run As: www-data:www-data") {
+		t.Errorf("Expected log message 'Run As: www-data:www-data' for git pull (default), got: %s", logOutput)
+	}
+}
+
+// TestGetEffectiveRunAs tests the getEffectiveRunAs helper function
+func TestGetEffectiveRunAs(t *testing.T) {
+	tests := []struct {
+		name       string
+		project    *ProjectConfig
+		wantUser   string
+		wantGroup  string
+	}{
+		{
+			name:      "default when not set",
+			project:   &ProjectConfig{},
+			wantUser:  "www-data",
+			wantGroup: "www-data",
+		},
+		{
+			name:      "custom user and group",
+			project:   &ProjectConfig{RunAsUser: "nginx", RunAsGroup: "www"},
+			wantUser:  "nginx",
+			wantGroup: "www",
+		},
+		{
+			name:      "custom user only",
+			project:   &ProjectConfig{RunAsUser: "deploy"},
+			wantUser:  "deploy",
+			wantGroup: "www-data",
+		},
+		{
+			name:      "custom group only",
+			project:   &ProjectConfig{RunAsGroup: "staff"},
+			wantUser:  "www-data",
+			wantGroup: "staff",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gotUser, gotGroup := getEffectiveRunAs(tt.project)
+			if gotUser != tt.wantUser {
+				t.Errorf("getEffectiveRunAs() user = %v, want %v", gotUser, tt.wantUser)
+			}
+			if gotGroup != tt.wantGroup {
+				t.Errorf("getEffectiveRunAs() group = %v, want %v", gotGroup, tt.wantGroup)
+			}
+		})
+	}
+}
