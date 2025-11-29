@@ -1,0 +1,18 @@
+{
+  "listen_port": 8080,
+  "log_filepath": "/var/log/sdeploy/daemon.log",
+  "projects": [
+    {
+      "name": "SDeploy Test Project",
+      "webhook_path": "/hooks/sdeploy-test",
+      "webhook_secret": "your_webhook_secret_here",
+      "git_repo": "https://github.com/devnodesin/sdeploy-test.git",
+      "local_path": "/home/mohamed/thalib/sdeploy-test",
+      "git_branch": "main",
+      "git_update": true,
+      "local_path": "/var/repo/sdeploy-test",
+      "execute_path": "/var/repo/sdeploy-test",
+      "execute_command": "sh build.sh"
+    }
+  ]
+}

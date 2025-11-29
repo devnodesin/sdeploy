@@ -69,6 +69,6 @@ sudo systemctl start sdeploy
 sudo systemctl status sdeploy
 
 # Test webhook
-curl -X POST "http://localhost:8080/hooks/myproject?secret=your_secret" \
+curl -X POST "http://localhost:8080/hooks/sdeploy-test?secret=your_webhook_secret_here" \
   -d '{"ref":"refs/heads/main"}'
 ```
