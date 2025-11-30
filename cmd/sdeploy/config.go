@@ -10,6 +10,7 @@ import (
 // Default configuration values
 const (
 	DefaultListenPort = 8080
+	DefaultLogPath    = "/var/log/sdeploy.log"
 )
 
 // EmailConfig holds global email/SMTP configuration
@@ -69,6 +70,14 @@ func LoadConfig(path string) (*Config, error) {
 	}
 
 	return &cfg, nil
+}
+
+// GetEffectiveLogPath returns the log file path from config, or DefaultLogPath if not set
+func GetEffectiveLogPath(cfg *Config) string {
+	if cfg.LogFilepath != "" {
+		return cfg.LogFilepath
+	}
+	return DefaultLogPath
 }
 
 // validateConfig performs validation checks on the configuration
