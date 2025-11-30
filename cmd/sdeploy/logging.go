@@ -10,6 +10,9 @@ import (
 	"time"
 )
 
+// DefaultLogPath is the default path for log files
+const DefaultLogPath = "/var/log/sdeploy.log"
+
 // Logger provides thread-safe logging with configurable output
 type Logger struct {
 	mu       sync.Mutex
@@ -21,8 +24,8 @@ type Logger struct {
 // NewLogger creates a new logger instance
 // If writer is provided, logs go to that writer (used for testing)
 // If filePath is provided, logs go to file (appending mode)
-// If both are nil/empty, logs go to stdout
-func NewLogger(writer io.Writer, filePath ...string) *Logger {
+// If both are nil/empty, logs go to stderr on error
+func NewLogger(writer io.Writer, filePath string) *Logger {
 	l := &Logger{}
 
 	// If writer is provided, use it directly (for testing)
@@ -32,9 +35,9 @@ func NewLogger(writer io.Writer, filePath ...string) *Logger {
 	}
 
 	// Determine log file path
-	logPath := "/var/log/sdeploy.log"
-	if len(filePath) > 0 && filePath[0] != "" {
-		logPath = filePath[0]
+	logPath := DefaultLogPath
+	if filePath != "" {
+		logPath = filePath
 	}
 	l.filePath = logPath
 
