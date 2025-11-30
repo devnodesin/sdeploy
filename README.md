@@ -55,9 +55,10 @@ SDeploy uses YAML format for configuration:
 | Key             | Description                              |
 |-----------------|------------------------------------------|
 | `listen_port`   | HTTP port (default: 8080)                |
-| `log_filepath`  | Log file path (daemon mode)              |
 | `email_config`  | SMTP settings for notifications          |
 | `projects`      | Array of project configurations          |
+
+**Note:** Logs are always written to `/var/log/sdeploy.log`. The `log_filepath` configuration option is deprecated and ignored.
 
 ### Project Config
 
@@ -109,7 +110,6 @@ SDeploy automatically detects changes to the configuration file and applies them
 
 - ✅ Project configurations (add/remove/modify)
 - ✅ Email/SMTP settings
-- ✅ Log file path
 - ⚠️ Listen port (requires restart)
 
 ### How It Works
