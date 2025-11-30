@@ -100,11 +100,8 @@ func (d *Deployer) Deploy(ctx context.Context, project *ProjectConfig, triggerSo
 		}
 	}()
 
-	// Increment active builds counter and set reload pending if configManager is set
+	// Increment active builds counter
 	atomic.AddInt32(&d.activeBuilds, 1)
-	if d.configManager != nil {
-		d.configManager.SetReloadPending(true)
-	}
 
 	if d.logger != nil {
 		d.logger.Infof(project.Name, "Starting deployment (trigger: %s)", triggerSource)
@@ -252,6 +249,13 @@ func isGitRepo(path string) bool {
 
 // gitClone clones a git repository to the specified local path
 func (d *Deployer) gitClone(ctx context.Context, projectName, repoURL, localPath, branch, runAsUser, runAsGroup string) error {
+	// Create parent directories if they don't exist (as root if running as root)
+	// The parent directory needs to exist and be writable by the target user
+	parentDir := filepath.Dir(localPath)
+	if err := ensureParentDirExists(ctx, parentDir, runAsUser, runAsGroup, d.logger, projectName); err != nil {
+		return fmt.Errorf("failed to create parent directory: %v", err)
+	}
+
 	gitCmd := fmt.Sprintf("git clone --branch %s %s %s", branch, repoURL, localPath)
 	if d.logger != nil {
 		d.logger.Infof(projectName, "Running: %s", gitCmd)

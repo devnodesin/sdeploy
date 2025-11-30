@@ -887,3 +887,204 @@ func TestSetProcessGroupWithNilSysProcAttr(t *testing.T) {
 		t.Error("Expected Setpgid to be true")
 	}
 }
+
+// TestEnsureParentDirExists tests the ensureParentDirExists function
+func TestEnsureParentDirExists(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("parent dir already exists", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		parentDir := tmpDir // Parent already exists
+		err := ensureParentDirExists(ctx, parentDir, "www-data", "www-data", nil, "TestProject")
+		if err != nil {
+			t.Errorf("Expected no error when parent dir exists, got: %v", err)
+		}
+	})
+
+	t.Run("creates parent dir", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		parentDir := filepath.Join(tmpDir, "new-parent")
+		var buf bytes.Buffer
+		logger := NewLogger(&buf, "")
+
+		err := ensureParentDirExists(ctx, parentDir, "www-data", "www-data", logger, "TestProject")
+		if err != nil {
+			t.Errorf("Expected no error creating parent dir, got: %v", err)
+		}
+
+		// Verify directory was created
+		info, err := os.Stat(parentDir)
+		if err != nil {
+			t.Fatalf("Expected parent dir to exist, got error: %v", err)
+		}
+		if !info.IsDir() {
+			t.Error("Expected parent dir to be a directory")
+		}
+
+		// Verify logging
+		logOutput := buf.String()
+		if !strings.Contains(logOutput, "Creating parent directory:") {
+			t.Errorf("Expected log message about creating parent directory, got: %s", logOutput)
+		}
+	})
+
+	t.Run("creates nested parent dirs", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		parentDir := filepath.Join(tmpDir, "level1", "level2", "level3")
+
+		err := ensureParentDirExists(ctx, parentDir, "www-data", "www-data", nil, "TestProject")
+		if err != nil {
+			t.Errorf("Expected no error creating nested parent dirs, got: %v", err)
+		}
+
+		// Verify directory was created
+		info, err := os.Stat(parentDir)
+		if err != nil {
+			t.Fatalf("Expected parent dir to exist, got error: %v", err)
+		}
+		if !info.IsDir() {
+			t.Error("Expected parent dir to be a directory")
+		}
+	})
+
+	t.Run("error when path is file", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		filePath := filepath.Join(tmpDir, "existing-file")
+
+		// Create a file at the parent path
+		if err := os.WriteFile(filePath, []byte("test"), 0644); err != nil {
+			t.Fatalf("Failed to create test file: %v", err)
+		}
+
+		err := ensureParentDirExists(ctx, filePath, "www-data", "www-data", nil, "TestProject")
+		if err == nil {
+			t.Error("Expected error when path is an existing file, got nil")
+		}
+		if err != nil && !strings.Contains(err.Error(), "not a directory") {
+			t.Errorf("Expected 'not a directory' error, got: %v", err)
+		}
+	})
+}
+
+// TestDeferredReloadNotTriggeredByWebhook tests that webhook trigger alone doesn't cause reload
+func TestDeferredReloadNotTriggeredByWebhook(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.json")
+
+	config := `{
+		"listen_port": 8080,
+		"projects": [
+			{
+				"name": "TestProject",
+				"webhook_path": "/hooks/test",
+				"webhook_secret": "secret123",
+				"execute_command": "echo test"
+			}
+		]
+	}`
+
+	if err := os.WriteFile(configPath, []byte(config), 0644); err != nil {
+		t.Fatalf("Failed to create test config file: %v", err)
+	}
+
+	var buf bytes.Buffer
+	logger := NewLogger(&buf, "")
+	cm, err := NewConfigManager(configPath, logger)
+	if err != nil {
+		t.Fatalf("NewConfigManager failed: %v", err)
+	}
+	defer cm.Stop()
+
+	deployer := NewDeployer(logger)
+	deployer.SetConfigManager(cm)
+
+	project := &ProjectConfig{
+		Name:           "TestProject",
+		WebhookPath:    "/hooks/test",
+		ExecuteCommand: "echo hello",
+	}
+
+	// Clear the buffer before deployment
+	buf.Reset()
+
+	// Deploy should NOT trigger config reload
+	result := deployer.Deploy(context.Background(), project, "INTERNAL")
+	if !result.Success {
+		t.Errorf("Expected deployment to succeed, got error: %s", result.Error)
+	}
+
+	logOutput := buf.String()
+
+	// Should NOT see "Processing deferred configuration reload" in logs
+	if strings.Contains(logOutput, "Processing deferred configuration reload") {
+		t.Error("Config reload should NOT be triggered by webhook/deployment alone")
+	}
+}
+
+// TestFilePermissionsWithUmask tests that files created during build have correct permissions
+func TestFilePermissionsWithUmask(t *testing.T) {
+	tmpDir := t.TempDir()
+	testFile := filepath.Join(tmpDir, "test_file.txt")
+
+	deployer := NewDeployer(nil)
+	project := &ProjectConfig{
+		Name:           "TestProject",
+		WebhookPath:    "/hooks/test",
+		ExecutePath:    tmpDir,
+		ExecuteCommand: "touch test_file.txt",
+	}
+
+	result := deployer.Deploy(context.Background(), project, "WEBHOOK")
+	if !result.Success {
+		t.Fatalf("Deployment failed: %s", result.Error)
+	}
+
+	// Check file exists
+	info, err := os.Stat(testFile)
+	if err != nil {
+		t.Fatalf("Expected test file to exist: %v", err)
+	}
+
+	// File permissions should allow read by all (umask 0022)
+	// Expected: -rw-r--r-- (0644) for files created with umask 0022
+	perm := info.Mode().Perm()
+	if perm&0044 == 0 {
+		t.Errorf("Expected file to be readable by group and others, got permissions: %o", perm)
+	}
+}
+
+// TestDirectoryPermissionsWithUmask tests that directories created during build have correct permissions
+func TestDirectoryPermissionsWithUmask(t *testing.T) {
+	tmpDir := t.TempDir()
+	testDir := filepath.Join(tmpDir, "test_dir")
+
+	deployer := NewDeployer(nil)
+	project := &ProjectConfig{
+		Name:           "TestProject",
+		WebhookPath:    "/hooks/test",
+		ExecutePath:    tmpDir,
+		ExecuteCommand: "mkdir test_dir",
+	}
+
+	result := deployer.Deploy(context.Background(), project, "WEBHOOK")
+	if !result.Success {
+		t.Fatalf("Deployment failed: %s", result.Error)
+	}
+
+	// Check directory exists
+	info, err := os.Stat(testDir)
+	if err != nil {
+		t.Fatalf("Expected test directory to exist: %v", err)
+	}
+
+	if !info.IsDir() {
+		t.Fatal("Expected test_dir to be a directory")
+	}
+
+	// Directory permissions should allow read/execute by all (umask 0022)
+	// Expected: drwxr-xr-x (0755) for directories created with umask 0022
+	perm := info.Mode().Perm()
+	if perm&0055 == 0 {
+		t.Errorf("Expected directory to be readable/executable by group and others, got permissions: %o", perm)
+	}
+}
