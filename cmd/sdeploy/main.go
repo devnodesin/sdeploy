@@ -16,9 +16,14 @@ const (
 func main() {
 	// Parse command line flags
 	configPath := flag.String("c", "", "Path to config file")
-	// daemonMode flag removed, no longer needed for logging
+	daemonMode := flag.Bool("d", false, "Run as daemon (background service)")
 	showHelp := flag.Bool("h", false, "Show help")
 	flag.Parse()
+
+	// Note: daemonMode flag is kept for compatibility with systemd service files
+	// and documentation. The flag indicates the service is running as a background
+	// daemon rather than in interactive console mode.
+	_ = daemonMode // Flag parsed for CLI compatibility
 
 	if *showHelp {
 		printUsage()
@@ -40,9 +45,9 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Initialize logger (always use hardcoded log file path)
+	// Initialize logger (always use default log file path)
 	var logger *Logger
-	logger = NewLogger(nil)
+	logger = NewLogger(nil, "")
 	defer logger.Close()
 
 	logger.Infof("", "%s %s - Service started", ServiceName, Version)
