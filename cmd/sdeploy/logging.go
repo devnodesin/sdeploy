@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -39,19 +40,72 @@ func NewLogger(writer io.Writer, filePath ...string) *Logger {
 
 	// Ensure parent directory exists
 	if err := ensureParentDir(logPath); err != nil {
-		l.writer = os.Stdout
+		reportLogFileError("create directory", filepath.Dir(logPath), err, "0755")
+		l.writer = os.Stderr
 		return l
 	}
 
 	// Open log file
 	file, err := os.OpenFile(logPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
 	if err != nil {
-		l.writer = os.Stdout
+		reportLogFileError("open/create file", logPath, err, "0644")
+		l.writer = os.Stderr
 	} else {
 		l.file = file
 		l.writer = file
 	}
 	return l
+}
+
+// reportLogFileError outputs a detailed error message to stderr when log file operations fail
+func reportLogFileError(operation, path string, err error, attemptedPerms string) {
+	fmt.Fprintf(os.Stderr, "\n[SDeploy] Log file error: failed to %s\n", operation)
+	fmt.Fprintf(os.Stderr, "  Path: %s\n", path)
+	fmt.Fprintf(os.Stderr, "  Error: %v\n", err)
+	fmt.Fprintf(os.Stderr, "  Attempted permissions: %s\n", attemptedPerms)
+
+	// Provide specific guidance based on error type
+	if errors.Is(err, os.ErrPermission) {
+		fmt.Fprintf(os.Stderr, "  Cause: Permission denied\n")
+		reportFilePermissions(path)
+		fmt.Fprintf(os.Stderr, "  Suggestions:\n")
+		fmt.Fprintf(os.Stderr, "    - Run sdeploy as root or with sudo\n")
+		fmt.Fprintf(os.Stderr, "    - Change ownership: sudo chown $USER %s\n", filepath.Dir(path))
+		fmt.Fprintf(os.Stderr, "    - Change permissions: sudo chmod 755 %s\n", filepath.Dir(path))
+	} else if errors.Is(err, os.ErrNotExist) {
+		fmt.Fprintf(os.Stderr, "  Cause: Path does not exist\n")
+		fmt.Fprintf(os.Stderr, "  Suggestions:\n")
+		fmt.Fprintf(os.Stderr, "    - Create directory: sudo mkdir -p %s\n", filepath.Dir(path))
+		fmt.Fprintf(os.Stderr, "    - Set permissions: sudo chmod 755 %s\n", filepath.Dir(path))
+	} else {
+		fmt.Fprintf(os.Stderr, "  Suggestions:\n")
+		fmt.Fprintf(os.Stderr, "    - Verify the path is valid and accessible\n")
+		fmt.Fprintf(os.Stderr, "    - Check disk space and filesystem status\n")
+	}
+
+	fmt.Fprintf(os.Stderr, "  Fallback: Logging to console (stderr)\n\n")
+}
+
+// reportFilePermissions attempts to report current file/directory permissions
+func reportFilePermissions(path string) {
+	// Try the path itself first, then parent directory
+	pathsToCheck := []string{path, filepath.Dir(path)}
+
+	for _, p := range pathsToCheck {
+		info, err := os.Stat(p)
+		if err != nil {
+			continue
+		}
+
+		fmt.Fprintf(os.Stderr, "  Current permissions for %s:\n", p)
+		fmt.Fprintf(os.Stderr, "    Mode: %s\n", info.Mode().String())
+
+		// Get owner/group info (platform-specific, handled via helper)
+		if ownerInfo := getFileOwnerInfo(info); ownerInfo != "" {
+			fmt.Fprintf(os.Stderr, "    Owner: %s\n", ownerInfo)
+		}
+		return
+	}
 }
 
 // ensureParentDir creates the parent directory of the given file path if it doesn't exist

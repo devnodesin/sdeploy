@@ -222,3 +222,139 @@ func TestLoggerCreatesParentDir(t *testing.T) {
 		t.Error("Expected subdir directory to be created")
 	}
 }
+
+// TestLoggerFallbackOnPermissionError tests that logger falls back to stderr on permission error
+func TestLoggerFallbackOnPermissionError(t *testing.T) {
+	// Use a path that should fail (root-owned directory without write permission)
+	// On most systems, /root or similar won't be writable by normal users
+	invalidPath := "/nonexistent_root_dir_12345/test.log"
+
+	// Capture stderr to verify error message
+	oldStderr := os.Stderr
+	r, w, _ := os.Pipe()
+	os.Stderr = w
+
+	logger := NewLogger(nil, invalidPath)
+	defer logger.Close()
+
+	// Write a test message
+	logger.Info("Test", "fallback message")
+
+	// Restore stderr and read captured output
+	w.Close()
+	os.Stderr = oldStderr
+	var buf bytes.Buffer
+	buf.ReadFrom(r)
+	stderrOutput := buf.String()
+
+	// Verify error was reported to stderr
+	if !strings.Contains(stderrOutput, "[SDeploy] Log file error") {
+		t.Errorf("Expected error message in stderr, got: %s", stderrOutput)
+	}
+
+	// Verify logger continues to work (writes to stderr)
+	if !strings.Contains(stderrOutput, "fallback message") {
+		t.Errorf("Expected fallback message in stderr output, got: %s", stderrOutput)
+	}
+}
+
+// TestLoggerErrorReportingContent tests the content of error messages
+func TestLoggerErrorReportingContent(t *testing.T) {
+	invalidPath := "/nonexistent_dir_xyz/subdir/test.log"
+
+	// Capture stderr
+	oldStderr := os.Stderr
+	r, w, _ := os.Pipe()
+	os.Stderr = w
+
+	logger := NewLogger(nil, invalidPath)
+	defer logger.Close()
+
+	w.Close()
+	os.Stderr = oldStderr
+	var buf bytes.Buffer
+	buf.ReadFrom(r)
+	stderrOutput := buf.String()
+
+	// Check for key information in error message
+	requiredParts := []string{
+		"Log file error",
+		"Path:",
+		"Error:",
+		"Attempted permissions:",
+		"Suggestions:",
+		"Fallback: Logging to console",
+	}
+
+	for _, part := range requiredParts {
+		if !strings.Contains(stderrOutput, part) {
+			t.Errorf("Expected error message to contain '%s', got: %s", part, stderrOutput)
+		}
+	}
+}
+
+// TestLoggerNoPanicOnError tests that logger does not panic on file errors
+func TestLoggerNoPanicOnError(t *testing.T) {
+	defer func() {
+		if r := recover(); r != nil {
+			t.Errorf("Logger panicked on error: %v", r)
+		}
+	}()
+
+	// Suppress stderr output during test
+	oldStderr := os.Stderr
+	_, w, _ := os.Pipe()
+	os.Stderr = w
+
+	// Try various invalid paths
+	invalidPaths := []string{
+		"/nonexistent/path/test.log",
+		"",
+		"/dev/null/invalid/path.log",
+	}
+
+	for _, path := range invalidPaths {
+		logger := NewLogger(nil, path)
+		logger.Info("Test", "message")
+		logger.Close()
+	}
+
+	w.Close()
+	os.Stderr = oldStderr
+}
+
+// TestLoggerContinuesAfterError tests that logger can continue logging after file error
+func TestLoggerContinuesAfterError(t *testing.T) {
+	invalidPath := "/nonexistent_test_path/log.txt"
+
+	// Capture stderr
+	oldStderr := os.Stderr
+	r, w, _ := os.Pipe()
+	os.Stderr = w
+
+	logger := NewLogger(nil, invalidPath)
+
+	// Log multiple messages
+	logger.Info("Project1", "message 1")
+	logger.Warn("Project2", "message 2")
+	logger.Error("Project3", "message 3")
+
+	logger.Close()
+
+	w.Close()
+	os.Stderr = oldStderr
+	var buf bytes.Buffer
+	buf.ReadFrom(r)
+	stderrOutput := buf.String()
+
+	// Verify all messages were logged to stderr
+	if !strings.Contains(stderrOutput, "message 1") {
+		t.Error("Expected message 1 in output")
+	}
+	if !strings.Contains(stderrOutput, "message 2") {
+		t.Error("Expected message 2 in output")
+	}
+	if !strings.Contains(stderrOutput, "message 3") {
+		t.Error("Expected message 3 in output")
+	}
+}

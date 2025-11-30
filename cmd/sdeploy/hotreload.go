@@ -10,14 +10,14 @@ import (
 
 // ConfigManager manages configuration with hot reload support
 type ConfigManager struct {
-	mu           sync.RWMutex
-	config       *Config
-	configPath   string
-	logger       *Logger
-	watcher      *fsnotify.Watcher
-	stopChan     chan struct{}
+	mu            sync.RWMutex
+	config        *Config
+	configPath    string
+	logger        *Logger
+	watcher       *fsnotify.Watcher
+	stopChan      chan struct{}
 	reloadPending atomic.Bool
-	
+
 	// Callback functions for notifying dependent components
 	onReload func(*Config)
 }
