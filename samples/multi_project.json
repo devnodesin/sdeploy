@@ -1,0 +1,56 @@
+{
+  "listen_port": 8080,
+  "log_filepath": "/var/log/sdeploy/daemon.log",
+  "email_config": {
+    "smtp_host": "smtp.example.com",
+    "smtp_port": 587,
+    "smtp_user": "user@example.com",
+    "smtp_pass": "your_smtp_password",
+    "email_sender": "sdeploy@example.com"
+  },
+  "projects": [
+    {
+      "name": "Frontend App",
+      "webhook_path": "/hooks/frontend",
+      "webhook_secret": "frontend_secret_token",
+      "git_repo": "https://github.com/myorg/frontend-app.git",
+      "local_path": "/var/repo/frontend",
+      "execute_path": "/var/www/frontend",
+      "git_branch": "main",
+      "git_update": true,
+      "execute_command": "npm install && npm run build",
+      "timeout_seconds": 600,
+      "run_as_user": "www-data",
+      "run_as_group": "www-data",
+      "email_recipients": ["frontend-team@example.com"]
+    },
+    {
+      "name": "Backend API",
+      "webhook_path": "/hooks/backend",
+      "webhook_secret": "backend_secret_token",
+      "git_repo": "https://github.com/myorg/backend-api.git",
+      "local_path": "/var/repo/backend",
+      "execute_path": "/var/app/backend",
+      "git_branch": "production",
+      "git_update": true,
+      "execute_command": "sh deploy.sh && systemctl restart backend-api",
+      "timeout_seconds": 300,
+      "run_as_user": "deploy",
+      "run_as_group": "deploy",
+      "email_recipients": ["backend-team@example.com", "devops@example.com"]
+    },
+    {
+      "name": "Documentation Site",
+      "webhook_path": "/hooks/docs",
+      "webhook_secret": "docs_secret_token",
+      "git_repo": "https://github.com/myorg/docs-site.git",
+      "local_path": "/var/repo/docs",
+      "execute_path": "/var/www/docs",
+      "git_branch": "main",
+      "git_update": true,
+      "execute_command": "mkdocs build --clean",
+      "timeout_seconds": 180,
+      "email_recipients": []
+    }
+  ]
+}

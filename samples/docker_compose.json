@@ -1,0 +1,19 @@
+{
+  "listen_port": 8080,
+  "log_filepath": "/var/log/sdeploy/daemon.log",
+  "projects": [
+    {
+      "name": "Docker Compose Stack",
+      "webhook_path": "/hooks/docker-stack",
+      "webhook_secret": "docker_stack_secret",
+      "git_repo": "https://github.com/myorg/docker-stack.git",
+      "local_path": "/opt/docker-stack",
+      "git_branch": "main",
+      "git_update": true,
+      "execute_command": "docker compose pull && docker compose up -d --remove-orphans",
+      "timeout_seconds": 600,
+      "run_as_user": "root",
+      "run_as_group": "docker"
+    }
+  ]
+}

@@ -8,6 +8,7 @@ A lightweight, Go-based daemon that automates deployments via webhooks.
 - **HMAC & Secret Auth** — Secure requests via signature or query parameter
 - **Branch Filtering** — Only deploy matching branches
 - **Single Execution** — One deployment at a time per project (lock-based)
+- **Pre-flight Checks** — Automatic directory setup with correct ownership and permissions
 - **Git Integration** — Optional `git pull` before running deploy commands
 - **Email Notifications** — Send deployment summaries on completion
 - **Daemon Mode** — Run as a background service with logging
@@ -57,16 +58,30 @@ See [samples/config.json](samples/config.json) for a complete example.
 
 ### Project Config
 
-| Key               | Description                                  |
-|-------------------|----------------------------------------------|
-| `name`            | Project identifier                           |
-| `webhook_path`    | Unique URI path (e.g., `/hooks/api`)         |
-| `webhook_secret`  | Secret for authentication                    |
-| `git_branch`      | Branch required to trigger deployment        |
-| `execute_command` | Shell command to run                         |
-| `execute_path`    | Working directory for command                |
-| `git_update`      | Run `git pull` before deployment             |
-| `email_recipients`| Notification email addresses                 |
+| Key               | Description                                       |
+|-------------------|---------------------------------------------------|
+| `name`            | Project identifier                                |
+| `webhook_path`    | Unique URI path (e.g., `/hooks/api`)              |
+| `webhook_secret`  | Secret for authentication                         |
+| `git_branch`      | Branch required to trigger deployment             |
+| `execute_command` | Shell command to run                              |
+| `local_path`      | Local directory for git operations                |
+| `execute_path`    | Working directory for command (defaults to local_path) |
+| `run_as_user`     | User to run commands as (default: www-data)       |
+| `run_as_group`    | Group to run commands as (default: www-data)      |
+| `git_update`      | Run `git pull` before deployment                  |
+| `email_recipients`| Notification email addresses                      |
+
+## Pre-flight Directory Checks
+
+SDeploy automatically handles directory setup before each deployment:
+
+- **Auto-Creation**: Missing `local_path` and `execute_path` directories are created automatically
+- **Ownership Management**: When running as root, directories are set to `run_as_user:run_as_group`
+- **Path Defaults**: If `execute_path` is not set, it defaults to `local_path`
+- **Logging**: All directory operations are logged for transparency
+
+This eliminates manual setup steps and ensures deployments work correctly from the first run.
 
 ## Triggering Deployments
 
