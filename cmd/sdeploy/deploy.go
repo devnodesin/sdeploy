@@ -110,6 +110,17 @@ func (d *Deployer) Deploy(ctx context.Context, project *ProjectConfig, triggerSo
 	// Log build config
 	d.logBuildConfig(project)
 
+	// Run preflight checks (directory existence, ownership, permissions)
+	if err := runPreflightChecks(ctx, project, d.logger); err != nil {
+		result.Error = err.Error()
+		result.EndTime = time.Now()
+		if d.logger != nil {
+			d.logger.Errorf(project.Name, "Preflight checks failed: %v", err)
+		}
+		d.sendNotification(project, &result, triggerSource)
+		return result
+	}
+
 	// Git operations (if git_repo is configured)
 	if project.GitRepo != "" {
 		if err := d.handleGitOperations(ctx, project); err != nil {
@@ -326,7 +337,8 @@ func (d *Deployer) executeCommand(ctx context.Context, project *ProjectConfig, t
 	}
 
 	// Log the command being executed with path
-	executePath := project.ExecutePath
+	// Get effective execute_path (defaults to local_path if not set)
+	executePath := getEffectiveExecutePath(project.LocalPath, project.ExecutePath)
 	if executePath == "" {
 		executePath = "."
 	}
@@ -348,9 +360,9 @@ func (d *Deployer) executeCommand(ctx context.Context, project *ProjectConfig, t
 	// Set process group so we can kill all child processes
 	setProcessGroup(cmd)
 
-	// Set working directory if configured
-	if project.ExecutePath != "" {
-		cmd.Dir = project.ExecutePath
+	// Set working directory to effective execute_path
+	if executePath != "." {
+		cmd.Dir = executePath
 	}
 
 	// Set environment variables

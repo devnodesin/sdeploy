@@ -193,6 +193,7 @@ SDeploy searches for its config file in order:
 - **Authentication (HMAC & Secret Fallback):** Prioritize HMAC signature (`X-Hub-Signature`). If missing, fallback to secret in URL query.
 - **Branch Verification:** Ensures webhook payload branch matches configured branch.
 - **Asynchronous Deployment:** Valid requests trigger deployment in background, respond `202 Accepted`.
+- **Pre-flight Directory Checks:** Automatically verifies and creates deployment directories with correct ownership and permissions before each deployment.
 - **Git Update Control:** If `git_update` is true, run `git pull` before deployment (default: `false`).
 - **Git Clone Control:** If `git_repo` is set and repo not already cloned, clone it. If already cloned, skip cloning.
 - **Local Directory Support:** If `git_repo` is absent/empty, treat `local_path` as a local directory and skip all git operations.
@@ -203,6 +204,35 @@ SDeploy searches for its config file in order:
 - **Per-Build Logging:** For each build/deployment, print the project configuration in the log.
 - **Email Notification:** On completion, sends summary email if configured (disabled if `email_config` is missing/invalid or `email_recipients` is empty).
 - **Hot Reload:** Configuration file changes are automatically detected and applied without restarting the daemon.
+
+## 🔍 Pre-flight Directory Checks
+
+SDeploy performs automated pre-flight checks before each deployment to ensure directories are properly set up.
+
+### Pre-flight Check Behavior
+
+| Aspect                | Behavior                                                                 |
+|-----------------------|--------------------------------------------------------------------------|
+| Directory Existence   | Checks if `local_path` and `execute_path` directories exist              |
+| Auto-Creation         | Missing directories are automatically created with 0755 permissions      |
+| Ownership Management  | When running as root, directories are owned by `run_as_user:run_as_group` |
+| Path Defaults         | If `execute_path` is not set, it defaults to `local_path`                |
+| Logging               | All directory creation and ownership changes are logged                  |
+
+### Pre-flight Check Flow
+
+1. **Validate local_path:** Check if exists, create if missing
+2. **Validate execute_path:** Check if exists (defaults to local_path if not set), create if missing
+3. **Set Ownership:** If running as root, chown directories to configured user/group
+4. **Log Actions:** All actions are logged for transparency
+
+### Error Handling
+
+| Error Type            | Handling                                                                 |
+|-----------------------|--------------------------------------------------------------------------|
+| Path is a file        | Deployment fails with clear error message                                |
+| Permission denied     | Deployment fails with clear error message                                |
+| User/Group not found  | Warning logged, directory owned by root (when running as root)           |
 
 ## 🔄 Hot Reload
 
@@ -275,13 +305,17 @@ On deferred reload (build in progress):
 5. **Lock Check:** If deployment lock held, log "Skipped" and return 202. If not, acquire lock and proceed.
 6. **Asynchronous Trigger:** Start deployment in background, return 202.
 7. **Log Project Config:** Print the project configuration in the log for this build.
-8. **Pre-Execution (Git Operations):**
+8. **Pre-flight Checks:**
+   - Verify `local_path` exists, create if missing with correct ownership.
+   - Verify `execute_path` exists (defaults to `local_path` if not set), create if missing.
+   - If running as root, set directory ownership to `run_as_user:run_as_group`.
+9. **Pre-Execution (Git Operations):**
    - If `git_repo` is absent or empty: Skip all git operations. Treat `local_path` as a local directory (existing repo or non-git directory).
    - If `git_repo` is set and repo not cloned at `local_path`: Clone the repo.
    - If `git_repo` is set and repo already cloned: Skip cloning.
    - If `git_update` is `true` (default: `false`): Run `git pull`.
-9. **Execution:** Run `execute_command` in `execute_path` (with timeout, env vars).
-10. **Cleanup & Notify:** Log result, send email notification (if `email_config` valid and `email_recipients` not empty), release lock.
+10. **Execution:** Run `execute_command` in `execute_path` (with timeout, env vars).
+11. **Cleanup & Notify:** Log result, send email notification (if `email_config` valid and `email_recipients` not empty), release lock.
 
 ## 🌐 Integration with Reverse Proxies
 

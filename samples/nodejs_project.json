@@ -1,0 +1,20 @@
+{
+  "listen_port": 8080,
+  "log_filepath": "/var/log/sdeploy/daemon.log",
+  "projects": [
+    {
+      "name": "Node.js API",
+      "webhook_path": "/hooks/nodejs-api",
+      "webhook_secret": "nodejs_api_secret",
+      "git_repo": "https://github.com/myorg/nodejs-api.git",
+      "local_path": "/var/repo/nodejs-api",
+      "git_branch": "main",
+      "git_update": true,
+      "execute_command": "npm ci --production && pm2 restart nodejs-api",
+      "timeout_seconds": 300,
+      "run_as_user": "node",
+      "run_as_group": "node",
+      "email_recipients": ["nodejs-team@example.com"]
+    }
+  ]
+}

@@ -20,6 +20,8 @@
       "execute_path": "/var/repo/sdeploy-test",
       "execute_command": "sh build.sh",
       "timeout_seconds": 300,
+      "run_as_user": "www-data",
+      "run_as_group": "www-data",
       "email_recipients": ["team@example.com"]
     }
   ]
