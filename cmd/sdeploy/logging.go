@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"sync"
 	"time"
 )
@@ -26,6 +27,12 @@ func NewLogger(writer io.Writer, filePath string) *Logger {
 	}
 
 	if filePath != "" {
+		// Ensure parent directory exists before opening file
+		if err := ensureParentDir(filePath); err != nil {
+			// Fall back to stdout on error creating parent directory
+			l.writer = os.Stdout
+			return l
+		}
 		// Open file in append mode
 		file, err := os.OpenFile(filePath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
 		if err != nil {
@@ -42,6 +49,15 @@ func NewLogger(writer io.Writer, filePath string) *Logger {
 	}
 
 	return l
+}
+
+// ensureParentDir creates the parent directory of the given file path if it doesn't exist
+func ensureParentDir(filePath string) error {
+	dir := filepath.Dir(filePath)
+	if dir == "" || dir == "." {
+		return nil
+	}
+	return os.MkdirAll(dir, 0755)
 }
 
 // Close closes the underlying file if one was opened

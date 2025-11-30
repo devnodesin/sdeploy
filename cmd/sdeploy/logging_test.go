@@ -189,3 +189,36 @@ func TestLoggerEmptyProject(t *testing.T) {
 		t.Errorf("Expected format '[INFO] message', got: %s", output)
 	}
 }
+
+// TestLoggerCreatesParentDir tests that logger creates parent directories if they don't exist
+func TestLoggerCreatesParentDir(t *testing.T) {
+	tmpDir := t.TempDir()
+	// Create a path with nested directories that don't exist yet
+	logPath := filepath.Join(tmpDir, "nested", "subdir", "daemon.log")
+
+	logger := NewLogger(nil, logPath)
+	defer logger.Close()
+
+	logger.Info("TestProject", "Message to nested log file")
+
+	// Verify the file was created
+	content, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatalf("Failed to read log file: %v", err)
+	}
+
+	if !strings.Contains(string(content), "Message to nested log file") {
+		t.Error("Expected log file to contain the message")
+	}
+
+	// Verify directories were created
+	nestedDir := filepath.Join(tmpDir, "nested")
+	if _, err := os.Stat(nestedDir); os.IsNotExist(err) {
+		t.Error("Expected nested directory to be created")
+	}
+
+	subdirDir := filepath.Join(tmpDir, "nested", "subdir")
+	if _, err := os.Stat(subdirDir); os.IsNotExist(err) {
+		t.Error("Expected subdir directory to be created")
+	}
+}
