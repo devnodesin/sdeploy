@@ -1020,3 +1020,71 @@ func TestDeferredReloadNotTriggeredByWebhook(t *testing.T) {
 		t.Error("Config reload should NOT be triggered by webhook/deployment alone")
 	}
 }
+
+// TestFilePermissionsWithUmask tests that files created during build have correct permissions
+func TestFilePermissionsWithUmask(t *testing.T) {
+	tmpDir := t.TempDir()
+	testFile := filepath.Join(tmpDir, "test_file.txt")
+
+	deployer := NewDeployer(nil)
+	project := &ProjectConfig{
+		Name:           "TestProject",
+		WebhookPath:    "/hooks/test",
+		ExecutePath:    tmpDir,
+		ExecuteCommand: "touch test_file.txt",
+	}
+
+	result := deployer.Deploy(context.Background(), project, "WEBHOOK")
+	if !result.Success {
+		t.Fatalf("Deployment failed: %s", result.Error)
+	}
+
+	// Check file exists
+	info, err := os.Stat(testFile)
+	if err != nil {
+		t.Fatalf("Expected test file to exist: %v", err)
+	}
+
+	// File permissions should allow read by all (umask 0022)
+	// Expected: -rw-r--r-- (0644) for files created with umask 0022
+	perm := info.Mode().Perm()
+	if perm&0044 == 0 {
+		t.Errorf("Expected file to be readable by group and others, got permissions: %o", perm)
+	}
+}
+
+// TestDirectoryPermissionsWithUmask tests that directories created during build have correct permissions
+func TestDirectoryPermissionsWithUmask(t *testing.T) {
+	tmpDir := t.TempDir()
+	testDir := filepath.Join(tmpDir, "test_dir")
+
+	deployer := NewDeployer(nil)
+	project := &ProjectConfig{
+		Name:           "TestProject",
+		WebhookPath:    "/hooks/test",
+		ExecutePath:    tmpDir,
+		ExecuteCommand: "mkdir test_dir",
+	}
+
+	result := deployer.Deploy(context.Background(), project, "WEBHOOK")
+	if !result.Success {
+		t.Fatalf("Deployment failed: %s", result.Error)
+	}
+
+	// Check directory exists
+	info, err := os.Stat(testDir)
+	if err != nil {
+		t.Fatalf("Expected test directory to exist: %v", err)
+	}
+
+	if !info.IsDir() {
+		t.Fatal("Expected test_dir to be a directory")
+	}
+
+	// Directory permissions should allow read/execute by all (umask 0022)
+	// Expected: drwxr-xr-x (0755) for directories created with umask 0022
+	perm := info.Mode().Perm()
+	if perm&0055 == 0 {
+		t.Errorf("Expected directory to be readable/executable by group and others, got permissions: %o", perm)
+	}
+}

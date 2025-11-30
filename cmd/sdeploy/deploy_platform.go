@@ -55,9 +55,14 @@ func getShellArgs() string {
 // buildCommand creates an exec.Cmd with user/group settings (Unix implementation)
 // It runs the command as the specified user and group if we're root,
 // or falls back to running as current user if user lookup fails
+// Sets umask 0022 to ensure created files are readable by the web server
 // Returns the command and a warning message (empty if no warning)
 func buildCommand(ctx context.Context, command, runAsUser, runAsGroup string) (*exec.Cmd, string) {
-	defaultCmd := exec.CommandContext(ctx, getShellPath(), getShellArgs(), command)
+	// Wrap command with umask to ensure proper file permissions for generated files
+	// umask 0022 means: owner gets full permissions, group and others get read/execute
+	wrappedCommand := "umask 0022 && " + command
+
+	defaultCmd := exec.CommandContext(ctx, getShellPath(), getShellArgs(), wrappedCommand)
 
 	// Check if we're running as root
 	currentUser, err := user.Current()
@@ -93,7 +98,7 @@ func buildCommand(ctx context.Context, command, runAsUser, runAsGroup string) (*
 		return defaultCmd, "Invalid GID for group '" + runAsGroup + "', running command as root"
 	}
 
-	cmd := exec.CommandContext(ctx, getShellPath(), getShellArgs(), command)
+	cmd := exec.CommandContext(ctx, getShellPath(), getShellArgs(), wrappedCommand)
 	cmd.SysProcAttr = &syscall.SysProcAttr{
 		Credential: &syscall.Credential{
 			Uid: uint32(uid),
