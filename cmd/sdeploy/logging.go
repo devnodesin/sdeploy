@@ -24,7 +24,7 @@ type Logger struct {
 // NewLogger creates a new logger instance
 // If writer is provided, logs go to that writer (used for testing)
 // If filePath is provided, logs go to file (appending mode)
-// If both are nil/empty, logs go to stderr on error
+// Falls back to stderr when file operations fail
 func NewLogger(writer io.Writer, filePath string) *Logger {
 	l := &Logger{}
 
