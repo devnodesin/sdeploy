@@ -18,7 +18,10 @@ go test ./cmd/sdeploy/... -v
 
 ```sh
 docker run --rm -v "$(pwd):/app" -w /app golang:latest \
-  sh -c "go mod tidy && go build -buildvcs=false -o sdeploy ./cmd/sdeploy"
+  sh -c "go mod tidy"
+
+docker run --rm -v "$(pwd):/app" -w /app golang:latest \
+  sh -c "go build -buildvcs=false -o sdeploy ./cmd/sdeploy"
 
 ## Run Test
 docker run --rm -v "$(pwd):/app" -w /app golang:latest \
