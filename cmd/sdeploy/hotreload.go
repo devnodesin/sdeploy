@@ -169,7 +169,7 @@ func (cm *ConfigManager) reloadConfig() {
 
 	if cm.logger != nil {
 		cm.logger.Info("", "Configuration reloaded successfully")
-		logConfigSummary(cm.logger, newConfig)
+		logConfigSummary(cm.logger, newConfig, cm.logger.IsDaemonMode())
 	}
 
 	// Notify dependent components

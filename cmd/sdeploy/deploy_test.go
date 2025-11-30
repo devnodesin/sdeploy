@@ -31,7 +31,7 @@ func TestDeployLockAcquisition(t *testing.T) {
 // TestDeploySkipOnBusy tests that concurrent deployments are skipped
 func TestDeploySkipOnBusy(t *testing.T) {
 	var buf bytes.Buffer
-	logger := NewLogger(&buf, "")
+	logger := NewLogger(&buf, "", false)
 	deployer := NewDeployer(logger)
 
 	project := &ProjectConfig{
@@ -92,7 +92,7 @@ func TestDeployGitPull(t *testing.T) {
 
 	// Create a simple script that echoes git pull
 	var buf bytes.Buffer
-	logger := NewLogger(&buf, "")
+	logger := NewLogger(&buf, "", false)
 	deployer := NewDeployer(logger)
 
 	project := &ProjectConfig{
@@ -352,7 +352,7 @@ func TestDeployNoGitRepo(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	var buf bytes.Buffer
-	logger := NewLogger(&buf, "")
+	logger := NewLogger(&buf, "", false)
 	deployer := NewDeployer(logger)
 
 	project := &ProjectConfig{
@@ -386,7 +386,7 @@ func TestDeployGitRepoAlreadyCloned(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	logger := NewLogger(&buf, "")
+	logger := NewLogger(&buf, "", false)
 	deployer := NewDeployer(logger)
 
 	project := &ProjectConfig{
@@ -430,7 +430,7 @@ func TestDeployBuildConfigLogging(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	logger := NewLogger(&buf, "")
+	logger := NewLogger(&buf, "", false)
 	deployer := NewDeployer(logger)
 
 	project := &ProjectConfig{
@@ -493,7 +493,7 @@ func TestGetShellArgs(t *testing.T) {
 // TestDeployErrorOutputLogging tests that error output is logged when command fails
 func TestDeployErrorOutputLogging(t *testing.T) {
 	var buf bytes.Buffer
-	logger := NewLogger(&buf, "")
+	logger := NewLogger(&buf, "", false)
 	deployer := NewDeployer(logger)
 
 	project := &ProjectConfig{
@@ -521,7 +521,7 @@ func TestDeployErrorOutputLogging(t *testing.T) {
 // TestDeploySuccessOutputLogging tests that output is logged when command succeeds
 func TestDeploySuccessOutputLogging(t *testing.T) {
 	var buf bytes.Buffer
-	logger := NewLogger(&buf, "")
+	logger := NewLogger(&buf, "", false)
 	deployer := NewDeployer(logger)
 
 	project := &ProjectConfig{
@@ -549,7 +549,7 @@ func TestDeploySuccessOutputLogging(t *testing.T) {
 // TestDeployLogOrderOutputBeforeCompleted tests that command output is logged BEFORE "Deployment completed"
 func TestDeployLogOrderOutputBeforeCompleted(t *testing.T) {
 	var buf bytes.Buffer
-	logger := NewLogger(&buf, "")
+	logger := NewLogger(&buf, "", false)
 	deployer := NewDeployer(logger)
 
 	project := &ProjectConfig{
@@ -587,7 +587,7 @@ func TestDeployExecuteCommandLogging(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	var buf bytes.Buffer
-	logger := NewLogger(&buf, "")
+	logger := NewLogger(&buf, "", false)
 	deployer := NewDeployer(logger)
 
 	project := &ProjectConfig{
@@ -725,7 +725,7 @@ func TestGitPullRunAsLogging(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	logger := NewLogger(&buf, "")
+	logger := NewLogger(&buf, "", false)
 	deployer := NewDeployer(logger)
 
 	project := &ProjectConfig{
@@ -763,7 +763,7 @@ func TestGitPullDefaultRunAs(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	logger := NewLogger(&buf, "")
+	logger := NewLogger(&buf, "", false)
 	deployer := NewDeployer(logger)
 
 	project := &ProjectConfig{
@@ -905,7 +905,7 @@ func TestEnsureParentDirExists(t *testing.T) {
 		tmpDir := t.TempDir()
 		parentDir := filepath.Join(tmpDir, "new-parent")
 		var buf bytes.Buffer
-		logger := NewLogger(&buf, "")
+		logger := NewLogger(&buf, "", false)
 
 		err := ensureParentDirExists(ctx, parentDir, "www-data", "www-data", logger, "TestProject")
 		if err != nil {
@@ -988,7 +988,7 @@ func TestDeferredReloadNotTriggeredByWebhook(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	logger := NewLogger(&buf, "")
+	logger := NewLogger(&buf, "", false)
 	cm, err := NewConfigManager(configPath, logger)
 	if err != nil {
 		t.Fatalf("NewConfigManager failed: %v", err)

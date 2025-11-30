@@ -12,7 +12,7 @@ import (
 // TestLoggerStdout tests logging to stdout
 func TestLoggerStdout(t *testing.T) {
 	var buf bytes.Buffer
-	logger := NewLogger(&buf, "")
+	logger := NewLogger(&buf, "", false)
 
 	logger.Info("TestProject", "This is an info message")
 
@@ -31,7 +31,7 @@ func TestLoggerStdout(t *testing.T) {
 // TestLoggerLevels tests all log levels
 func TestLoggerLevels(t *testing.T) {
 	var buf bytes.Buffer
-	logger := NewLogger(&buf, "")
+	logger := NewLogger(&buf, "", false)
 
 	logger.Info("Project", "info message")
 	logger.Warn("Project", "warn message")
@@ -54,7 +54,7 @@ func TestLoggerFileOutput(t *testing.T) {
 	tmpDir := t.TempDir()
 	logPath := filepath.Join(tmpDir, "test.log")
 
-	logger := NewLogger(nil, logPath)
+	logger := NewLogger(nil, logPath, true)
 	defer logger.Close()
 
 	logger.Info("TestProject", "File log message")
@@ -76,7 +76,7 @@ func TestLoggerFileOutput(t *testing.T) {
 // TestLoggerFormat tests the log format: [TIMESTAMP] [LEVEL] [PROJECT] message
 func TestLoggerFormat(t *testing.T) {
 	var buf bytes.Buffer
-	logger := NewLogger(&buf, "")
+	logger := NewLogger(&buf, "", false)
 
 	logger.Info("MyProject", "test message")
 
@@ -98,7 +98,7 @@ func TestLoggerFormat(t *testing.T) {
 // TestLoggerThreadSafety tests thread safety of logging
 func TestLoggerThreadSafety(t *testing.T) {
 	var buf bytes.Buffer
-	logger := NewLogger(&buf, "")
+	logger := NewLogger(&buf, "", false)
 
 	var wg sync.WaitGroup
 	numGoroutines := 10
@@ -137,7 +137,7 @@ func TestLoggerAppendToFile(t *testing.T) {
 	}
 
 	// Create logger and write
-	logger := NewLogger(nil, logPath)
+	logger := NewLogger(nil, logPath, true)
 	logger.Info("Project", "Appended message")
 	logger.Close()
 
@@ -158,7 +158,7 @@ func TestLoggerAppendToFile(t *testing.T) {
 // TestLoggerWithTimestamp tests that logs include timestamps
 func TestLoggerWithTimestamp(t *testing.T) {
 	var buf bytes.Buffer
-	logger := NewLogger(&buf, "")
+	logger := NewLogger(&buf, "", false)
 
 	logger.Info("Project", "test")
 
@@ -172,7 +172,7 @@ func TestLoggerWithTimestamp(t *testing.T) {
 // TestLoggerEmptyProject tests logging with empty project name
 func TestLoggerEmptyProject(t *testing.T) {
 	var buf bytes.Buffer
-	logger := NewLogger(&buf, "")
+	logger := NewLogger(&buf, "", false)
 
 	logger.Info("", "message without project")
 
@@ -196,7 +196,7 @@ func TestLoggerCreatesParentDir(t *testing.T) {
 	// Create a path with nested directories that don't exist yet
 	logPath := filepath.Join(tmpDir, "nested", "subdir", "daemon.log")
 
-	logger := NewLogger(nil, logPath)
+	logger := NewLogger(nil, logPath, true)
 	defer logger.Close()
 
 	logger.Info("TestProject", "Message to nested log file")
@@ -234,7 +234,7 @@ func TestLoggerFallbackOnPermissionError(t *testing.T) {
 	r, w, _ := os.Pipe()
 	os.Stderr = w
 
-	logger := NewLogger(nil, invalidPath)
+	logger := NewLogger(nil, invalidPath, true)
 	defer logger.Close()
 
 	// Write a test message
@@ -267,7 +267,7 @@ func TestLoggerErrorReportingContent(t *testing.T) {
 	r, w, _ := os.Pipe()
 	os.Stderr = w
 
-	logger := NewLogger(nil, invalidPath)
+	logger := NewLogger(nil, invalidPath, true)
 	defer logger.Close()
 
 	w.Close()
@@ -314,7 +314,7 @@ func TestLoggerNoPanicOnError(t *testing.T) {
 	}
 
 	for _, path := range invalidPaths {
-		logger := NewLogger(nil, path)
+		logger := NewLogger(nil, path, true)
 		logger.Info("Test", "message")
 		logger.Close()
 	}
@@ -332,7 +332,7 @@ func TestLoggerContinuesAfterError(t *testing.T) {
 	r, w, _ := os.Pipe()
 	os.Stderr = w
 
-	logger := NewLogger(nil, invalidPath)
+	logger := NewLogger(nil, invalidPath, true)
 
 	// Log multiple messages
 	logger.Info("Project1", "message 1")
@@ -356,5 +356,94 @@ func TestLoggerContinuesAfterError(t *testing.T) {
 	}
 	if !strings.Contains(stderrOutput, "message 3") {
 		t.Error("Expected message 3 in output")
+	}
+}
+
+// TestLoggerConsoleModeStderr tests that console mode (daemonMode=false) logs to stderr
+func TestLoggerConsoleModeStderr(t *testing.T) {
+	// Capture stderr
+	oldStderr := os.Stderr
+	r, w, _ := os.Pipe()
+	os.Stderr = w
+
+	// Create logger in console mode (daemonMode=false)
+	logger := NewLogger(nil, "", false)
+
+	logger.Info("ConsoleProject", "console mode message")
+
+	logger.Close()
+
+	w.Close()
+	os.Stderr = oldStderr
+	var buf bytes.Buffer
+	buf.ReadFrom(r)
+	stderrOutput := buf.String()
+
+	// Verify message was logged to stderr
+	if !strings.Contains(stderrOutput, "console mode message") {
+		t.Errorf("Expected console mode message in stderr, got: %s", stderrOutput)
+	}
+	if !strings.Contains(stderrOutput, "[ConsoleProject]") {
+		t.Errorf("Expected project name in stderr, got: %s", stderrOutput)
+	}
+}
+
+// TestLoggerDaemonModeFile tests that daemon mode (daemonMode=true) logs to file
+func TestLoggerDaemonModeFile(t *testing.T) {
+	tmpDir := t.TempDir()
+	logPath := filepath.Join(tmpDir, "daemon.log")
+
+	// Create logger in daemon mode (daemonMode=true)
+	logger := NewLogger(nil, logPath, true)
+
+	logger.Info("DaemonProject", "daemon mode message")
+
+	logger.Close()
+
+	// Verify message was logged to file
+	content, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatalf("Failed to read log file: %v", err)
+	}
+
+	if !strings.Contains(string(content), "daemon mode message") {
+		t.Errorf("Expected daemon mode message in log file, got: %s", string(content))
+	}
+	if !strings.Contains(string(content), "[DaemonProject]") {
+		t.Errorf("Expected project name in log file, got: %s", string(content))
+	}
+}
+
+// TestLoggerConsoleModeIgnoresFilePath tests that console mode ignores file path parameter
+func TestLoggerConsoleModeIgnoresFilePath(t *testing.T) {
+	tmpDir := t.TempDir()
+	logPath := filepath.Join(tmpDir, "should_not_exist.log")
+
+	// Capture stderr
+	oldStderr := os.Stderr
+	r, w, _ := os.Pipe()
+	os.Stderr = w
+
+	// Create logger in console mode with a file path (should be ignored)
+	logger := NewLogger(nil, logPath, false)
+
+	logger.Info("Project", "test message")
+
+	logger.Close()
+
+	w.Close()
+	os.Stderr = oldStderr
+	var buf bytes.Buffer
+	buf.ReadFrom(r)
+	stderrOutput := buf.String()
+
+	// Verify message went to stderr
+	if !strings.Contains(stderrOutput, "test message") {
+		t.Errorf("Expected message in stderr, got: %s", stderrOutput)
+	}
+
+	// Verify file was NOT created (console mode should ignore file path)
+	if _, err := os.Stat(logPath); !os.IsNotExist(err) {
+		t.Error("Expected log file to NOT be created in console mode")
 	}
 }

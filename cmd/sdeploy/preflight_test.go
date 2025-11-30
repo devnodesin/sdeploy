@@ -16,7 +16,7 @@ func TestPreflightDirCreation(t *testing.T) {
 	executePath := filepath.Join(tmpDir, "www")
 
 	var buf bytes.Buffer
-	logger := NewLogger(&buf, "")
+	logger := NewLogger(&buf, "", false)
 
 	project := &ProjectConfig{
 		Name:        "TestProject",
@@ -59,7 +59,7 @@ func TestPreflightExistingDirs(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	logger := NewLogger(&buf, "")
+	logger := NewLogger(&buf, "", false)
 
 	project := &ProjectConfig{
 		Name:        "TestProject",
@@ -85,7 +85,7 @@ func TestPreflightExecutePathDefault(t *testing.T) {
 	localPath := filepath.Join(tmpDir, "repo")
 
 	var buf bytes.Buffer
-	logger := NewLogger(&buf, "")
+	logger := NewLogger(&buf, "", false)
 
 	project := &ProjectConfig{
 		Name:        "TestProject",
@@ -111,7 +111,7 @@ func TestPreflightNestedDirs(t *testing.T) {
 	executePath := filepath.Join(tmpDir, "another", "deep", "path", "www")
 
 	var buf bytes.Buffer
-	logger := NewLogger(&buf, "")
+	logger := NewLogger(&buf, "", false)
 
 	project := &ProjectConfig{
 		Name:        "TestProject",
@@ -136,7 +136,7 @@ func TestPreflightNestedDirs(t *testing.T) {
 // TestPreflightEmptyPaths tests handling of empty paths
 func TestPreflightEmptyPaths(t *testing.T) {
 	var buf bytes.Buffer
-	logger := NewLogger(&buf, "")
+	logger := NewLogger(&buf, "", false)
 
 	project := &ProjectConfig{
 		Name:        "TestProject",
@@ -162,7 +162,7 @@ func TestPreflightFileConflict(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	logger := NewLogger(&buf, "")
+	logger := NewLogger(&buf, "", false)
 
 	project := &ProjectConfig{
 		Name:        "TestProject",
@@ -185,7 +185,7 @@ func TestPreflightLogging(t *testing.T) {
 	localPath := filepath.Join(tmpDir, "repo")
 
 	var buf bytes.Buffer
-	logger := NewLogger(&buf, "")
+	logger := NewLogger(&buf, "", false)
 
 	project := &ProjectConfig{
 		Name:        "TestProject",
@@ -212,7 +212,7 @@ func TestPreflightPermissions(t *testing.T) {
 	localPath := filepath.Join(tmpDir, "repo")
 
 	var buf bytes.Buffer
-	logger := NewLogger(&buf, "")
+	logger := NewLogger(&buf, "", false)
 
 	project := &ProjectConfig{
 		Name:        "TestProject",
@@ -244,7 +244,7 @@ func TestPreflightWithRunAsUser(t *testing.T) {
 	localPath := filepath.Join(tmpDir, "repo")
 
 	var buf bytes.Buffer
-	logger := NewLogger(&buf, "")
+	logger := NewLogger(&buf, "", false)
 
 	project := &ProjectConfig{
 		Name:        "TestProject",
@@ -310,7 +310,7 @@ func TestPreflightCompletionLogging(t *testing.T) {
 	localPath := filepath.Join(tmpDir, "repo")
 
 	var buf bytes.Buffer
-	logger := NewLogger(&buf, "")
+	logger := NewLogger(&buf, "", false)
 
 	project := &ProjectConfig{
 		Name:        "TestProject",

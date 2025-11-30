@@ -245,7 +245,7 @@ func TestWebhookTriggerSource(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	logger := NewLogger(&buf, "")
+	logger := NewLogger(&buf, "", false)
 	handler := NewWebhookHandler(cfg, logger)
 
 	// With HMAC - should be WEBHOOK trigger

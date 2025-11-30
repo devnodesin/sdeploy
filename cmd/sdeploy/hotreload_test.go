@@ -103,7 +103,7 @@ projects:
 	}
 
 	var buf bytes.Buffer
-	logger := NewLogger(&buf, "")
+	logger := NewLogger(&buf, "", false)
 	cm, err := NewConfigManager(configPath, logger)
 	if err != nil {
 		t.Fatalf("NewConfigManager failed: %v", err)
@@ -173,7 +173,7 @@ projects:
 	}
 
 	var buf bytes.Buffer
-	logger := NewLogger(&buf, "")
+	logger := NewLogger(&buf, "", false)
 	cm, err := NewConfigManager(configPath, logger)
 	if err != nil {
 		t.Fatalf("NewConfigManager failed: %v", err)
@@ -228,7 +228,7 @@ projects:
 	}
 
 	var buf bytes.Buffer
-	logger := NewLogger(&buf, "")
+	logger := NewLogger(&buf, "", false)
 	cm, err := NewConfigManager(configPath, logger)
 	if err != nil {
 		t.Fatalf("NewConfigManager failed: %v", err)
@@ -350,7 +350,7 @@ projects:
 	}
 
 	var buf bytes.Buffer
-	logger := NewLogger(&buf, "")
+	logger := NewLogger(&buf, "", false)
 	cm, err := NewConfigManager(configPath, logger)
 	if err != nil {
 		t.Fatalf("NewConfigManager failed: %v", err)

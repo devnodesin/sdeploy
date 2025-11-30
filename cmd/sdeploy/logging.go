@@ -12,18 +12,23 @@ import (
 
 // Logger provides thread-safe logging with configurable output
 type Logger struct {
-	mu       sync.Mutex
-	writer   io.Writer
-	file     *os.File
-	filePath string
+	mu         sync.Mutex
+	writer     io.Writer
+	file       *os.File
+	filePath   string
+	daemonMode bool
 }
 
 // NewLogger creates a new logger instance
 // If writer is provided, logs go to that writer (used for testing)
 // If filePath is provided, logs go to file (appending mode)
+// If daemonMode is false, logs go to stderr (console mode)
+// If daemonMode is true, logs go to file (daemon mode)
 // Falls back to stderr when file operations fail
-func NewLogger(writer io.Writer, filePath string) *Logger {
-	l := &Logger{}
+func NewLogger(writer io.Writer, filePath string, daemonMode bool) *Logger {
+	l := &Logger{
+		daemonMode: daemonMode,
+	}
 
 	// If writer is provided, use it directly (for testing)
 	if writer != nil {
@@ -31,6 +36,13 @@ func NewLogger(writer io.Writer, filePath string) *Logger {
 		return l
 	}
 
+	// In console mode (non-daemon), always output to stderr
+	if !daemonMode {
+		l.writer = os.Stderr
+		return l
+	}
+
+	// Daemon mode: write to log file
 	// Determine log file path
 	logPath := DefaultLogPath
 	if filePath != "" {
@@ -115,6 +127,11 @@ func ensureParentDir(filePath string) error {
 		return nil
 	}
 	return os.MkdirAll(dir, 0755)
+}
+
+// IsDaemonMode returns whether the logger is in daemon mode
+func (l *Logger) IsDaemonMode() bool {
+	return l.daemonMode
 }
 
 // Close closes the underlying file if one was opened
