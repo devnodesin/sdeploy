@@ -10,9 +10,6 @@ import (
 	"time"
 )
 
-// DefaultLogPath is the default path for log files
-const DefaultLogPath = "/var/log/sdeploy.log"
-
 // Logger provides thread-safe logging with configurable output
 type Logger struct {
 	mu       sync.Mutex
