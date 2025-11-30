@@ -1,0 +1,28 @@
+{
+  "listen_port": 8080,
+  "log_filepath": "/var/log/sdeploy/daemon.log",
+  "email_config": {
+    "smtp_host": "smtp.example.com",
+    "smtp_port": 587,
+    "smtp_user": "user@example.com",
+    "smtp_pass": "your_smtp_password",
+    "email_sender": "sdeploy@example.com"
+  },
+  "projects": [
+    {
+      "name": "SDeploy Test Project",
+      "webhook_path": "/hooks/sdeploy-test",
+      "webhook_secret": "your_webhook_secret_here",
+      "git_repo": "https://github.com/devnodesin/sdeploy-test.git",
+      "local_path": "/var/repo/sdeploy-test",
+      "git_branch": "main",
+      "git_update": true,
+      "execute_path": "/var/repo/sdeploy-test",
+      "execute_command": "sh build.sh",
+      "timeout_seconds": 300,
+      "run_as_user": "www-data",
+      "run_as_group": "www-data",
+      "email_recipients": ["team@example.com"]
+    }
+  ]
+}
