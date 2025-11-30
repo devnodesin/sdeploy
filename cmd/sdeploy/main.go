@@ -16,9 +16,14 @@ const (
 func main() {
 	// Parse command line flags
 	configPath := flag.String("c", "", "Path to config file")
-	// daemonMode flag removed, no longer needed for logging
+	daemonMode := flag.Bool("d", false, "Run as daemon (background service)")
 	showHelp := flag.Bool("h", false, "Show help")
 	flag.Parse()
+
+	// Note: daemonMode flag is kept for compatibility with systemd service files
+	// and documentation. The flag indicates the service is running as a background
+	// daemon rather than in interactive console mode.
+	_ = daemonMode // Flag parsed for CLI compatibility
 
 	if *showHelp {
 		printUsage()
@@ -40,9 +45,9 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Initialize logger (use log_filepath from config, or default)
+	// Initialize logger (always use default log file path)
 	var logger *Logger
-	logger = NewLogger(nil, GetEffectiveLogPath(cfg))
+	logger = NewLogger(nil, "")
 	defer logger.Close()
 
 	logger.Infof("", "%s %s - Service started", ServiceName, Version)
@@ -126,7 +131,7 @@ func main() {
 func logConfigSummary(logger *Logger, cfg *Config) {
 	logger.Info("", "Configuration loaded:")
 	logger.Infof("", "  Listen Port: %d", cfg.ListenPort)
-	logger.Infof("", "  Log File: %s", GetEffectiveLogPath(cfg))
+	logger.Infof("", "  Log File: %s", DefaultLogPath)
 	if IsEmailConfigValid(cfg.EmailConfig) {
 		logger.Info("", "  Email Notifications: enabled")
 	} else {
