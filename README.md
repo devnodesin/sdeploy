@@ -47,7 +47,10 @@ Config file search order:
 
 ## Configuration
 
-SDeploy uses YAML format for configuration. See [samples/sdeploy.conf](samples/sdeploy.conf) for a complete example.
+SDeploy uses YAML format for configuration:
+
+- **[samples/sdeploy.conf](samples/sdeploy.conf)** — Minimal quick-start example
+- **[samples/sdeploy-full.conf](samples/sdeploy-full.conf)** — Full reference with all fields documented
 
 | Key             | Description                              |
 |-----------------|------------------------------------------|

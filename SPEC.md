@@ -107,11 +107,15 @@ SDeploy uses YAML format for configuration. It searches for config file in order
 2. `/etc/sdeploy.conf`
 3. `./sdeploy.conf`
 
-### Sample Configuration
+### Sample Configuration Files
+
+- **[samples/sdeploy.conf](samples/sdeploy.conf)** — Minimal quick-start example
+- **[samples/sdeploy-full.conf](samples/sdeploy-full.conf)** — Full reference with all fields and comments
+
+### Sample Example
 
 ```yaml
 listen_port: 8080
-log_filepath: /var/log/sdeploy/daemon.log
 
 email_config:
   smtp_host: smtp.sendgrid.net

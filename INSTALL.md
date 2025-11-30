@@ -50,38 +50,28 @@ sudo cp sdeploy /usr/local/bin/
 2. Create config:
 
 ```sh
+# Quick start (minimal config)
 sudo cp samples/sdeploy.conf /etc/sdeploy.conf
-# Edit config as needed
+
+# Or use the full reference config
+sudo cp samples/sdeploy-full.conf /etc/sdeploy.conf
 
 sudo cp samples/sdeploy.service /etc/systemd/system/sdeploy.service
 ```
 
-3. Enable and start:
+3. systemctl Service:
 
 ```sh
+# Register and Enable Service
 sudo systemctl daemon-reload
 sudo systemctl enable sdeploy
+
+# Start/stop service
 sudo systemctl start sdeploy
-```
+sudo systemctl stop sdeploy
 
-
-
-### Example Scenario
-
-If your config specifies:
-```yaml
-listen_port: 8080
-log_filepath: /var/log/sdeploy/daemon.log
-
-projects:
-  - name: SDeploy Test
-    webhook_path: /hooks/sdeploy-test
-    webhook_secret: your_webhook_secret_here
-    git_repo: https://github.com/devnodesin/sdeploy-test.git
-    git_branch: main
-    git_update: true
-    local_path: /opt/sdeploy/sdeploy-test
-    execute_command: sh build.sh
+# Check status
+sudo systemctl status sdeploy
 ```
 
 ## Verify
@@ -94,52 +84,3 @@ sudo systemctl status sdeploy
 curl -X POST "http://localhost:8080/hooks/sdeploy-test?secret=your_webhook_secret_here" \
   -d '{"ref":"refs/heads/main"}'
 ```
-
-## Migration from JSON to YAML
-
-If you're upgrading from an older version that used JSON configuration:
-
-1. **Config file location changed:**
-   - Old: `/etc/sdeploy/config.json` or `./config.json`
-   - New: `/etc/sdeploy.conf` or `./sdeploy.conf`
-
-2. **Convert your JSON config to YAML format:**
-   - Remove curly braces `{}` and square brackets `[]`
-   - Replace `:` with `: ` (colon followed by space)
-   - Use indentation for nested objects
-   - Arrays use `- ` prefix for each item
-
-3. **Example conversion:**
-
-   **Before (JSON):**
-   ```json
-   {
-     "listen_port": 8080,
-     "projects": [
-       {
-         "name": "My Project",
-         "webhook_path": "/hooks/myproject",
-         "webhook_secret": "secret123"
-       }
-     ]
-   }
-   ```
-
-   **After (YAML):**
-   ```yaml
-   listen_port: 8080
-   projects:
-     - name: My Project
-       webhook_path: /hooks/myproject
-       webhook_secret: secret123
-   ```
-
-4. **Update systemd service** (if applicable):
-   - The service file no longer needs a config directory
-   - Config is now at `/etc/sdeploy.conf`
-
-5. **Backup and remove old files:**
-   ```sh
-   sudo mv /etc/sdeploy/config.json /etc/sdeploy/config.json.bak
-   sudo rmdir /etc/sdeploy  # if empty
-   ```
