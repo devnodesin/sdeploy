@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"os/exec"
 	"os/user"
@@ -102,4 +103,73 @@ func buildCommand(ctx context.Context, command, runAsUser, runAsGroup string) (*
 	}
 
 	return cmd, ""
+}
+
+// ensureParentDirExists creates parent directories if they don't exist and ensures
+// they are owned by the specified user/group. This is needed for git clone to work
+// when running as a different user.
+func ensureParentDirExists(ctx context.Context, parentDir, runAsUser, runAsGroup string, logger *Logger, projectName string) error {
+	// Check if parent directory already exists
+	if info, err := os.Stat(parentDir); err == nil {
+		if info.IsDir() {
+			// Directory exists, nothing to do
+			return nil
+		}
+		return fmt.Errorf("parent path exists but is not a directory: %s", parentDir)
+	}
+
+	// Check if we're running as root
+	currentUser, err := user.Current()
+	if err != nil {
+		return fmt.Errorf("unable to determine current user: %v", err)
+	}
+
+	// Log the directory creation
+	if logger != nil {
+		logger.Infof(projectName, "Creating parent directory: %s", parentDir)
+	}
+
+	// Create the directory
+	if err := os.MkdirAll(parentDir, 0755); err != nil {
+		return fmt.Errorf("failed to create directory: %v", err)
+	}
+
+	// If we're running as root, chown the directory to the target user/group
+	if currentUser.Uid == "0" {
+		targetUser, err := user.Lookup(runAsUser)
+		if err != nil {
+			if logger != nil {
+				logger.Warnf(projectName, "User '%s' not found, directory owned by root", runAsUser)
+			}
+			return nil
+		}
+
+		targetGroup, err := user.LookupGroup(runAsGroup)
+		if err != nil {
+			if logger != nil {
+				logger.Warnf(projectName, "Group '%s' not found, directory owned by root", runAsGroup)
+			}
+			return nil
+		}
+
+		uid, err := strconv.Atoi(targetUser.Uid)
+		if err != nil {
+			return fmt.Errorf("invalid UID for user '%s': %v", runAsUser, err)
+		}
+
+		gid, err := strconv.Atoi(targetGroup.Gid)
+		if err != nil {
+			return fmt.Errorf("invalid GID for group '%s': %v", runAsGroup, err)
+		}
+
+		if logger != nil {
+			logger.Infof(projectName, "Setting ownership of %s to %s:%s", parentDir, runAsUser, runAsGroup)
+		}
+
+		if err := os.Chown(parentDir, uid, gid); err != nil {
+			return fmt.Errorf("failed to chown directory: %v", err)
+		}
+	}
+
+	return nil
 }
