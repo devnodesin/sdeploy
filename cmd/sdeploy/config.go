@@ -82,14 +82,6 @@ func LoadConfig(path string) (*Config, error) {
 	return &cfg, nil
 }
 
-// GetEffectiveLogPath returns the log file path from config, or Defaults.LogPath if not set
-func GetEffectiveLogPath(cfg *Config) string {
-	if cfg.LogFilepath != "" {
-		return cfg.LogFilepath
-	}
-	return Defaults.LogPath
-}
-
 // validateConfig performs validation checks on the configuration
 func validateConfig(cfg *Config) error {
 	// Check for at least one project (optional, but need to validate projects if present)

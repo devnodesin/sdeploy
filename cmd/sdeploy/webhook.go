@@ -194,8 +194,3 @@ func extractBranchFromPayload(payload []byte) string {
 
 	return ""
 }
-
-// StartServer starts the webhook HTTP server
-func StartServer(addr string, handler http.Handler) error {
-	return http.ListenAndServe(addr, handler)
-}

@@ -47,8 +47,7 @@ func main() {
 	// Initialize logger
 	// Console mode: logs to stderr for interactive use
 	// Daemon mode: logs to file for background service use
-	var logger *Logger
-	logger = NewLogger(nil, "", *daemonMode)
+	logger := NewLogger(nil, "", *daemonMode)
 	defer logger.Close()
 
 	logger.Infof("", "%s %s - Service started", ServiceName, Version)
