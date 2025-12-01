@@ -13,9 +13,10 @@ fi
 if [ ! -f "sdeploy" ]; then
 	echo "Error: sdeploy binary not found in current directory."
 	echo "Please build sdeploy first (see INSTALL.md)."
+  echo ""
   echo "Run go build -o sdeploy ./cmd/sdeploy"
   echo "Or use Docker to build:"
-  echo "docker run --rm -v "$(pwd):/app" -w /app golang:latest sh -c "go build -buildvcs=false -o sdeploy ./cmd/sdeploy""
+  echo 'docker run --rm -v "$(pwd):/app" -w /app golang:latest sh -c "go build -buildvcs=false -o sdeploy ./cmd/sdeploy"'
 	exit 1
 fi
 
