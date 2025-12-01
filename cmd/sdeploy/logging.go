@@ -44,7 +44,7 @@ func NewLogger(writer io.Writer, filePath string, daemonMode bool) *Logger {
 
 	// Daemon mode: write to log file
 	// Determine log file path
-	logPath := DefaultLogPath
+	logPath := Defaults.LogPath
 	if filePath != "" {
 		logPath = filePath
 	}
