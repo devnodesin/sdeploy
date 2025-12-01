@@ -46,9 +46,8 @@ docker run --rm -v "$(pwd):/app" -w /app golang:latest \
 ```sh
 sudo cp sdeploy /usr/local/bin/
 
-# Mk dir
+# Create directory for deployments
 sudo mkdir -pv /opt/sdeploy
-sudo chown -R www-data:www-data /opt/sdeploy/
 
 ```
 

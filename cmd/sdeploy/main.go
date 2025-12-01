@@ -162,16 +162,6 @@ func logConfigSummary(logger *Logger, cfg *Config, daemonMode bool) {
 			logger.Infof("", "  - Execute Path: %s", project.ExecutePath)
 		}
 		logger.Infof("", "  - Execute Command: %s", project.ExecuteCommand)
-		// Show run as user/group if configured
-		runAsUser := project.RunAsUser
-		if runAsUser == "" {
-			runAsUser = Defaults.RunAsUser
-		}
-		runAsGroup := project.RunAsGroup
-		if runAsGroup == "" {
-			runAsGroup = Defaults.RunAsGroup
-		}
-		logger.Infof("", "  - Run As: %s:%s", runAsUser, runAsGroup)
 		if project.TimeoutSeconds > 0 {
 			logger.Infof("", "  - Timeout: %ds", project.TimeoutSeconds)
 		}

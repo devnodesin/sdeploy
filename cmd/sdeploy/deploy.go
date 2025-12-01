@@ -190,29 +190,12 @@ func (d *Deployer) logBuildConfig(project *ProjectConfig) {
 	)
 }
 
-// getEffectiveRunAs returns the effective run_as_user and run_as_group for a project
-// If not configured in the project, defaults to Defaults.RunAsUser:Defaults.RunAsGroup
-func getEffectiveRunAs(project *ProjectConfig) (string, string) {
-	runAsUser := project.RunAsUser
-	if runAsUser == "" {
-		runAsUser = Defaults.RunAsUser
-	}
-	runAsGroup := project.RunAsGroup
-	if runAsGroup == "" {
-		runAsGroup = Defaults.RunAsGroup
-	}
-	return runAsUser, runAsGroup
-}
-
 // handleGitOperations handles git clone/pull based on configuration
 func (d *Deployer) handleGitOperations(ctx context.Context, project *ProjectConfig) error {
-	// Get effective user/group for running git commands (same as execute_command)
-	runAsUser, runAsGroup := getEffectiveRunAs(project)
-
 	// Check if local_path exists and is a git repo
 	if !isGitRepo(project.LocalPath) {
 		// Need to clone
-		if err := d.gitClone(ctx, project.Name, project.GitRepo, project.LocalPath, project.GitBranch, runAsUser, runAsGroup); err != nil {
+		if err := d.gitClone(ctx, project.Name, project.GitRepo, project.LocalPath, project.GitBranch); err != nil {
 			if d.logger != nil {
 				d.logger.Errorf(project.Name, "Git clone failed: %v", err)
 			}
@@ -227,7 +210,7 @@ func (d *Deployer) handleGitOperations(ctx context.Context, project *ProjectConf
 		}
 		// Check if we should do git pull
 		if project.GitUpdate {
-			if err := d.gitPull(ctx, project, runAsUser, runAsGroup); err != nil {
+			if err := d.gitPull(ctx, project); err != nil {
 				if d.logger != nil {
 					d.logger.Errorf(project.Name, "Git pull failed: %v", err)
 				}
@@ -259,25 +242,20 @@ func isGitRepo(path string) bool {
 }
 
 // gitClone clones a git repository to the specified local path
-func (d *Deployer) gitClone(ctx context.Context, projectName, repoURL, localPath, branch, runAsUser, runAsGroup string) error {
-	// Create parent directories if they don't exist (as root if running as root)
-	// The parent directory needs to exist and be writable by the target user
+func (d *Deployer) gitClone(ctx context.Context, projectName, repoURL, localPath, branch string) error {
+	// Create parent directories if they don't exist
 	parentDir := filepath.Dir(localPath)
-	if err := ensureParentDirExists(ctx, parentDir, runAsUser, runAsGroup, d.logger, projectName); err != nil {
+	if err := ensureParentDirExists(ctx, parentDir, d.logger, projectName); err != nil {
 		return fmt.Errorf("failed to create parent directory: %v", err)
 	}
 
 	gitCmd := fmt.Sprintf("git clone --branch %s %s %s", branch, repoURL, localPath)
 	if d.logger != nil {
 		d.logger.Infof(projectName, "Running: %s", gitCmd)
-		d.logger.Infof(projectName, "Run As: %s:%s", runAsUser, runAsGroup)
 	}
 
-	// Build the command with user/group support
-	cmd, warning := buildCommand(ctx, gitCmd, runAsUser, runAsGroup)
-	if warning != "" && d.logger != nil {
-		d.logger.Warnf(projectName, "%s", warning)
-	}
+	// Build the command
+	cmd := buildCommand(ctx, gitCmd)
 
 	// Set process group so we can kill all child processes
 	setProcessGroup(cmd)
@@ -296,18 +274,14 @@ func (d *Deployer) gitClone(ctx context.Context, projectName, repoURL, localPath
 }
 
 // gitPull executes git pull in the project's local path
-func (d *Deployer) gitPull(ctx context.Context, project *ProjectConfig, runAsUser, runAsGroup string) error {
+func (d *Deployer) gitPull(ctx context.Context, project *ProjectConfig) error {
 	if d.logger != nil {
 		d.logger.Infof(project.Name, "Running: git pull")
 		d.logger.Infof(project.Name, "Path: %s", project.LocalPath)
-		d.logger.Infof(project.Name, "Run As: %s:%s", runAsUser, runAsGroup)
 	}
 
-	// Build the command with user/group support
-	cmd, warning := buildCommand(ctx, "git pull", runAsUser, runAsGroup)
-	if warning != "" && d.logger != nil {
-		d.logger.Warnf(project.Name, "%s", warning)
-	}
+	// Build the command
+	cmd := buildCommand(ctx, "git pull")
 
 	// Set process group so we can kill all child processes
 	setProcessGroup(cmd)
@@ -348,14 +322,8 @@ func (d *Deployer) executeCommand(ctx context.Context, project *ProjectConfig, t
 		d.logger.Infof(project.Name, "  Command: %s", project.ExecuteCommand)
 	}
 
-	// Get effective user/group for running the command
-	runAsUser, runAsGroup := getEffectiveRunAs(project)
-
-	// Build the command with user/group support
-	cmd, warning := buildCommand(ctx, project.ExecuteCommand, runAsUser, runAsGroup)
-	if warning != "" && d.logger != nil {
-		d.logger.Warnf(project.Name, "%s", warning)
-	}
+	// Build the command
+	cmd := buildCommand(ctx, project.ExecuteCommand)
 
 	// Set process group so we can kill all child processes
 	setProcessGroup(cmd)

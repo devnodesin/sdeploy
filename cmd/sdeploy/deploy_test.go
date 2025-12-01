@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
-	"syscall"
 	"testing"
 	"time"
 )
@@ -625,248 +624,12 @@ func TestDeployExecuteCommandLogging(t *testing.T) {
 	}
 }
 
-// TestRunAsUserGroupConfig tests run_as_user and run_as_group configuration
-func TestRunAsUserGroupConfig(t *testing.T) {
-	tmpDir := t.TempDir()
-	configPath := filepath.Join(tmpDir, "config.json")
-
-	// Config with run_as_user and run_as_group
-	configWithRunAs := `{
-		"listen_port": 8080,
-		"projects": [
-			{
-				"name": "Frontend",
-				"webhook_path": "/hooks/frontend",
-				"webhook_secret": "secret_token_123",
-				"execute_command": "sh deploy.sh",
-				"run_as_user": "nobody",
-				"run_as_group": "nogroup"
-			}
-		]
-	}`
-
-	err := os.WriteFile(configPath, []byte(configWithRunAs), 0644)
-	if err != nil {
-		t.Fatalf("Failed to create test config file: %v", err)
-	}
-
-	cfg, err := LoadConfig(configPath)
-	if err != nil {
-		t.Fatalf("LoadConfig failed: %v", err)
-	}
-
-	project := cfg.Projects[0]
-	if project.RunAsUser != "nobody" {
-		t.Errorf("Expected RunAsUser 'nobody', got '%s'", project.RunAsUser)
-	}
-	if project.RunAsGroup != "nogroup" {
-		t.Errorf("Expected RunAsGroup 'nogroup', got '%s'", project.RunAsGroup)
-	}
-}
-
-// TestDefaultRunAsUserGroup tests default run_as_user and run_as_group values
-func TestDefaultRunAsUserGroup(t *testing.T) {
-	tmpDir := t.TempDir()
-	configPath := filepath.Join(tmpDir, "config.json")
-
-	// Config without run_as_user and run_as_group
-	configNoRunAs := `{
-		"listen_port": 8080,
-		"projects": [
-			{
-				"name": "Frontend",
-				"webhook_path": "/hooks/frontend",
-				"webhook_secret": "secret_token_123",
-				"execute_command": "sh deploy.sh"
-			}
-		]
-	}`
-
-	err := os.WriteFile(configPath, []byte(configNoRunAs), 0644)
-	if err != nil {
-		t.Fatalf("Failed to create test config file: %v", err)
-	}
-
-	cfg, err := LoadConfig(configPath)
-	if err != nil {
-		t.Fatalf("LoadConfig failed: %v", err)
-	}
-
-	project := cfg.Projects[0]
-	// RunAsUser and RunAsGroup should be empty strings in config, defaults are applied at runtime
-	if project.RunAsUser != "" {
-		t.Errorf("Expected RunAsUser to be empty string (defaults applied at runtime), got '%s'", project.RunAsUser)
-	}
-	if project.RunAsGroup != "" {
-		t.Errorf("Expected RunAsGroup to be empty string (defaults applied at runtime), got '%s'", project.RunAsGroup)
-	}
-}
-
 // TestBuildCommandFunction tests buildCommand function exists and works
 func TestBuildCommandFunction(t *testing.T) {
 	ctx := context.Background()
-	cmd, warning := buildCommand(ctx, "echo test", Defaults.RunAsUser, Defaults.RunAsGroup)
+	cmd := buildCommand(ctx, "echo test")
 	if cmd == nil {
 		t.Error("Expected buildCommand to return a non-nil command")
-	}
-	// Warning may or may not be empty depending on whether Defaults.RunAsUser exists
-	// and whether running as root - we just verify it doesn't panic
-	_ = warning
-}
-
-// TestGitPullRunAsLogging tests that git pull logs the Run As user/group
-func TestGitPullRunAsLogging(t *testing.T) {
-	tmpDir := t.TempDir()
-
-	// Create a .git directory to simulate an already cloned repo
-	gitDir := filepath.Join(tmpDir, ".git")
-	if err := os.MkdirAll(gitDir, 0755); err != nil {
-		t.Fatalf("Failed to create .git directory: %v", err)
-	}
-
-	var buf bytes.Buffer
-	logger := NewLogger(&buf, "", false)
-	deployer := NewDeployer(logger)
-
-	project := &ProjectConfig{
-		Name:           "TestProject",
-		WebhookPath:    "/hooks/test",
-		GitRepo:        "https://github.com/example/repo.git",
-		LocalPath:      tmpDir,
-		GitBranch:      "main",
-		GitUpdate:      true, // Enable git pull
-		ExecutePath:    tmpDir,
-		ExecuteCommand: "echo done",
-		RunAsUser:      "testuser",
-		RunAsGroup:     "testgroup",
-	}
-
-	// Deploy will fail on git pull (not a real git repo), but we can verify the logging
-	deployer.Deploy(context.Background(), project, "WEBHOOK")
-
-	logOutput := buf.String()
-
-	// Should see "Run As:" logging for git pull
-	if !strings.Contains(logOutput, "Run As: testuser:testgroup") {
-		t.Errorf("Expected log message 'Run As: testuser:testgroup' for git pull, got: %s", logOutput)
-	}
-}
-
-// TestGitPullDefaultRunAs tests that git pull uses default Defaults.RunAsUser:Defaults.RunAsGroup when not configured
-func TestGitPullDefaultRunAs(t *testing.T) {
-	tmpDir := t.TempDir()
-
-	// Create a .git directory to simulate an already cloned repo
-	gitDir := filepath.Join(tmpDir, ".git")
-	if err := os.MkdirAll(gitDir, 0755); err != nil {
-		t.Fatalf("Failed to create .git directory: %v", err)
-	}
-
-	var buf bytes.Buffer
-	logger := NewLogger(&buf, "", false)
-	deployer := NewDeployer(logger)
-
-	project := &ProjectConfig{
-		Name:           "TestProject",
-		WebhookPath:    "/hooks/test",
-		GitRepo:        "https://github.com/example/repo.git",
-		LocalPath:      tmpDir,
-		GitBranch:      "main",
-		GitUpdate:      true, // Enable git pull
-		ExecutePath:    tmpDir,
-		ExecuteCommand: "echo done",
-		// RunAsUser and RunAsGroup are not set, should default to Defaults.RunAsUser:Defaults.RunAsGroup
-	}
-
-	// Deploy will fail on git pull (not a real git repo), but we can verify the logging
-	deployer.Deploy(context.Background(), project, "WEBHOOK")
-
-	logOutput := buf.String()
-
-	// Should see default "Run As: Defaults.RunAsUser:Defaults.RunAsGroup" logging for git pull
-	expectedRunAs := "Run As: " + Defaults.RunAsUser + ":" + Defaults.RunAsGroup
-	if !strings.Contains(logOutput, expectedRunAs) {
-		t.Errorf("Expected log message '%s' for git pull (default), got: %s", expectedRunAs, logOutput)
-	}
-}
-
-// TestGetEffectiveRunAs tests the getEffectiveRunAs helper function
-func TestGetEffectiveRunAs(t *testing.T) {
-	tests := []struct {
-		name      string
-		project   *ProjectConfig
-		wantUser  string
-		wantGroup string
-	}{
-		{
-			name:      "default when not set",
-			project:   &ProjectConfig{},
-			wantUser:  Defaults.RunAsUser,
-			wantGroup: Defaults.RunAsGroup,
-		},
-		{
-			name:      "custom user and group",
-			project:   &ProjectConfig{RunAsUser: "nginx", RunAsGroup: "www"},
-			wantUser:  "nginx",
-			wantGroup: "www",
-		},
-		{
-			name:      "custom user only",
-			project:   &ProjectConfig{RunAsUser: "deploy"},
-			wantUser:  "deploy",
-			wantGroup: Defaults.RunAsGroup,
-		},
-		{
-			name:      "custom group only",
-			project:   &ProjectConfig{RunAsGroup: "staff"},
-			wantUser:  Defaults.RunAsUser,
-			wantGroup: "staff",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			gotUser, gotGroup := getEffectiveRunAs(tt.project)
-			if gotUser != tt.wantUser {
-				t.Errorf("getEffectiveRunAs() user = %v, want %v", gotUser, tt.wantUser)
-			}
-			if gotGroup != tt.wantGroup {
-				t.Errorf("getEffectiveRunAs() group = %v, want %v", gotGroup, tt.wantGroup)
-			}
-		})
-	}
-}
-
-// TestSetProcessGroupPreservesCredentials tests that setProcessGroup preserves existing SysProcAttr
-func TestSetProcessGroupPreservesCredentials(t *testing.T) {
-	ctx := context.Background()
-
-	// Create a command with SysProcAttr already set (simulating buildCommand with credentials)
-	cmd := exec.CommandContext(ctx, "echo", "test")
-	cmd.SysProcAttr = &syscall.SysProcAttr{
-		Credential: &syscall.Credential{
-			Uid: 1000,
-			Gid: 1000,
-		},
-	}
-
-	// Call setProcessGroup - it should preserve the credential
-	setProcessGroup(cmd)
-
-	// Verify Setpgid was set
-	if !cmd.SysProcAttr.Setpgid {
-		t.Error("Expected Setpgid to be true")
-	}
-
-	// Verify Credential was preserved
-	if cmd.SysProcAttr.Credential == nil {
-		t.Fatal("Expected Credential to be preserved, but it was nil")
-	}
-	if cmd.SysProcAttr.Credential.Uid != 1000 {
-		t.Errorf("Expected Uid 1000, got %d", cmd.SysProcAttr.Credential.Uid)
-	}
-	if cmd.SysProcAttr.Credential.Gid != 1000 {
-		t.Errorf("Expected Gid 1000, got %d", cmd.SysProcAttr.Credential.Gid)
 	}
 }
 
@@ -896,7 +659,7 @@ func TestEnsureParentDirExists(t *testing.T) {
 	t.Run("parent dir already exists", func(t *testing.T) {
 		tmpDir := t.TempDir()
 		parentDir := tmpDir // Parent already exists
-		err := ensureParentDirExists(ctx, parentDir, Defaults.RunAsUser, Defaults.RunAsGroup, nil, "TestProject")
+		err := ensureParentDirExists(ctx, parentDir, nil, "TestProject")
 		if err != nil {
 			t.Errorf("Expected no error when parent dir exists, got: %v", err)
 		}
@@ -908,7 +671,7 @@ func TestEnsureParentDirExists(t *testing.T) {
 		var buf bytes.Buffer
 		logger := NewLogger(&buf, "", false)
 
-		err := ensureParentDirExists(ctx, parentDir, Defaults.RunAsUser, Defaults.RunAsGroup, logger, "TestProject")
+		err := ensureParentDirExists(ctx, parentDir, logger, "TestProject")
 		if err != nil {
 			t.Errorf("Expected no error creating parent dir, got: %v", err)
 		}
@@ -933,7 +696,7 @@ func TestEnsureParentDirExists(t *testing.T) {
 		tmpDir := t.TempDir()
 		parentDir := filepath.Join(tmpDir, "level1", "level2", "level3")
 
-		err := ensureParentDirExists(ctx, parentDir, Defaults.RunAsUser, Defaults.RunAsGroup, nil, "TestProject")
+		err := ensureParentDirExists(ctx, parentDir, nil, "TestProject")
 		if err != nil {
 			t.Errorf("Expected no error creating nested parent dirs, got: %v", err)
 		}
@@ -957,7 +720,7 @@ func TestEnsureParentDirExists(t *testing.T) {
 			t.Fatalf("Failed to create test file: %v", err)
 		}
 
-		err := ensureParentDirExists(ctx, filePath, Defaults.RunAsUser, Defaults.RunAsGroup, nil, "TestProject")
+		err := ensureParentDirExists(ctx, filePath, nil, "TestProject")
 		if err == nil {
 			t.Error("Expected error when path is an existing file, got nil")
 		}

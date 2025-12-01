@@ -8,19 +8,15 @@ import (
 )
 
 // Defaults holds all default configuration values in a single struct
-// Access via: Defaults.Port, Defaults.LogPath, Defaults.RunAsUser, etc.
+// Access via: Defaults.Port, Defaults.LogPath, etc.
 var Defaults = struct {
-	Port       int
-	LogPath    string
-	RunAsUser  string
-	RunAsGroup string
-	GitBranch  string
+	Port      int
+	LogPath   string
+	GitBranch string
 }{
-	Port:       8080,
-	LogPath:    "/var/log/sdeploy.log",
-	RunAsUser:  "www-data",
-	RunAsGroup: "www-data",
-	GitBranch:  "main",
+	Port:      8080,
+	LogPath:   "/var/log/sdeploy.log",
+	GitBranch: "main",
 }
 
 // ConfigSearchPaths defines the search order for config files
@@ -51,8 +47,6 @@ type ProjectConfig struct {
 	GitUpdate       bool     `yaml:"git_update"`
 	TimeoutSeconds  int      `yaml:"timeout_seconds"`
 	EmailRecipients []string `yaml:"email_recipients"`
-	RunAsUser       string   `yaml:"run_as_user"`  // User to run commands as (default: Defaults.RunAsUser)
-	RunAsGroup      string   `yaml:"run_as_group"` // Group to run commands as (default: Defaults.RunAsGroup)
 }
 
 // Config holds the complete SDeploy configuration

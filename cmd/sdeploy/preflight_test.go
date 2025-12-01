@@ -238,33 +238,6 @@ func TestPreflightPermissions(t *testing.T) {
 	}
 }
 
-// TestPreflightWithRunAsUser tests preflight with custom run_as_user
-func TestPreflightWithRunAsUser(t *testing.T) {
-	tmpDir := t.TempDir()
-	localPath := filepath.Join(tmpDir, "repo")
-
-	var buf bytes.Buffer
-	logger := NewLogger(&buf, "", false)
-
-	project := &ProjectConfig{
-		Name:        "TestProject",
-		LocalPath:   localPath,
-		ExecutePath: localPath,
-		RunAsUser:   "testuser",
-		RunAsGroup:  "testgroup",
-	}
-
-	err := runPreflightChecks(context.Background(), project, logger)
-	if err != nil {
-		t.Fatalf("Preflight checks failed: %v", err)
-	}
-
-	// Verify directory was created
-	if _, err := os.Stat(localPath); os.IsNotExist(err) {
-		t.Error("Expected local_path to be created")
-	}
-}
-
 // TestGetEffectiveExecutePath tests the helper function for execute_path defaulting
 func TestGetEffectiveExecutePath(t *testing.T) {
 	tests := []struct {

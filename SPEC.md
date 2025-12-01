@@ -30,19 +30,15 @@ All hardcoded fallback defaults must be centralized in `cmd/sdeploy/config.go`. 
 
 ```go
 // Defaults holds all default configuration values in a single struct
-// Access via: Defaults.Port, Defaults.LogPath, Defaults.RunAsUser, etc.
+// Access via: Defaults.Port, Defaults.LogPath, etc.
 var Defaults = struct {
-	Port       int
-	LogPath    string
-	RunAsUser  string
-	RunAsGroup string
-	GitBranch  string
+	Port      int
+	LogPath   string
+	GitBranch string
 }{
-	Port:       8080,
-	LogPath:    "/var/log/sdeploy.log",
-	RunAsUser:  "www-data",
-	RunAsGroup: "www-data",
-	GitBranch:  "main",
+	Port:      8080,
+	LogPath:   "/var/log/sdeploy.log",
+	GitBranch: "main",
 }
 
 // ConfigSearchPaths defines the search order for config files
@@ -55,8 +51,8 @@ var ConfigSearchPaths = []string{
 ### Developer Workflow for Default Values
 
 1. **Always define defaults in the `Defaults` struct**: Never use hardcoded string literals for default values directly in business logic.
-2. **Reference via `Defaults.X`**: All code and tests should access defaults via `Defaults.Port`, `Defaults.RunAsUser`, etc.
-3. **Naming convention**: Use clear, concise field names (e.g., `Port`, `LogPath`, `RunAsUser`).
+2. **Reference via `Defaults.X`**: All code and tests should access defaults via `Defaults.Port`, `Defaults.GitBranch`, etc.
+3. **Naming convention**: Use clear, concise field names (e.g., `Port`, `LogPath`, `GitBranch`).
 4. **Update tests**: Tests should use `Defaults.X` instead of hardcoded values to ensure they stay in sync.
 5. **Document in SPEC.md**: When adding new defaults, update the struct definition above.
 
@@ -264,16 +260,14 @@ SDeploy performs automated pre-flight checks before each deployment to ensure di
 |-----------------------|--------------------------------------------------------------------------|
 | Directory Existence   | Checks if `local_path` and `execute_path` directories exist              |
 | Auto-Creation         | Missing directories are automatically created with 0755 permissions      |
-| Ownership Management  | When running as root, directories are owned by `run_as_user:run_as_group` |
 | Path Defaults         | If `execute_path` is not set, it defaults to `local_path`                |
-| Logging               | All directory creation and ownership changes are logged                  |
+| Logging               | All directory creation actions are logged                                |
 
 ### Pre-flight Check Flow
 
 1. **Validate local_path:** Check if exists, create if missing
 2. **Validate execute_path:** Check if exists (defaults to local_path if not set), create if missing
-3. **Set Ownership:** If running as root, chown directories to configured user/group
-4. **Log Actions:** All actions are logged for transparency
+3. **Log Actions:** All actions are logged for transparency
 
 ### Error Handling
 
@@ -281,7 +275,6 @@ SDeploy performs automated pre-flight checks before each deployment to ensure di
 |-----------------------|--------------------------------------------------------------------------|
 | Path is a file        | Deployment fails with clear error message                                |
 | Permission denied     | Deployment fails with clear error message                                |
-| User/Group not found  | Warning logged, directory owned by root (when running as root)           |
 
 ## 🔄 Hot Reload
 
@@ -355,9 +348,8 @@ On deferred reload (build in progress):
 6. **Asynchronous Trigger:** Start deployment in background, return 202.
 7. **Log Project Config:** Print the project configuration in the log for this build.
 8. **Pre-flight Checks:**
-   - Verify `local_path` exists, create if missing with correct ownership.
+   - Verify `local_path` exists, create if missing with 0755 permissions.
    - Verify `execute_path` exists (defaults to `local_path` if not set), create if missing.
-   - If running as root, set directory ownership to `run_as_user:run_as_group`.
 9. **Pre-Execution (Git Operations):**
    - If `git_repo` is absent or empty: Skip all git operations. Treat `local_path` as a local directory (existing repo or non-git directory).
    - If `git_repo` is set and repo not cloned at `local_path`: Clone the repo.

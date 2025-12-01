@@ -71,8 +71,6 @@ SDeploy uses YAML format for configuration:
 | `execute_command` | Shell command to run                              |
 | `local_path`      | Local directory for git operations                |
 | `execute_path`    | Working directory for command (defaults to local_path) |
-| `run_as_user`     | User to run commands as (default: www-data)       |
-| `run_as_group`    | Group to run commands as (default: www-data)      |
 | `git_update`      | Run `git pull` before deployment                  |
 | `email_recipients`| Notification email addresses                      |
 
@@ -80,8 +78,7 @@ SDeploy uses YAML format for configuration:
 
 SDeploy automatically handles directory setup before each deployment:
 
-- **Auto-Creation**: Missing `local_path` and `execute_path` directories are created automatically
-- **Ownership Management**: When running as root, directories are set to `run_as_user:run_as_group`
+- **Auto-Creation**: Missing `local_path` and `execute_path` directories are created automatically with 0755 permissions
 - **Path Defaults**: If `execute_path` is not set, it defaults to `local_path`
 - **Logging**: All directory operations are logged for transparency
 
