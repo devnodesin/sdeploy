@@ -23,6 +23,8 @@ For all operations, consult these sections in `SPEC.md`:
 	- Every feature, bugfix, or refactor must be accompanied by one or more unit tests before implementation.
 	- All major logic modules require corresponding `*_test.go` files.
 	- No code is considered complete or production-ready without passing tests, as enforced in `SPEC.md`.
+	- Documentation related to installation and usage must be included in `INSTALL.md`, not in `README.md`.
+	- Keep the `README.md` focused on the project overview and features.
 
 # PRD Template
 

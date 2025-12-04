@@ -21,25 +21,28 @@ if [ ! -f "sdeploy" ]; then
 fi
 
 echo "Stopping sdeploy service if running..."
-sudo systemctl stop sdeploy
+systemctl stop sdeploy
+
+mkdir -p /etc/sdeploy-keys
+chmod 700 /etc/sdeploy-keys
 
 echo "Copying sdeploy binary to /usr/local/bin..."
-sudo cp sdeploy /usr/local/bin/
+cp sdeploy /usr/local/bin/
 
 echo "Copying config files: /etc/sdeploy.conf"
-sudo cp samples/sdeploy.conf /etc/sdeploy.conf
+cp samples/sdeploy.conf /etc/sdeploy.conf
 
 echo "Copying systemd service files: /etc/systemd/system/sdeploy.service"
-sudo cp samples/sdeploy.service /etc/systemd/system/sdeploy.service
+cp samples/sdeploy.service /etc/systemd/system/sdeploy.service
 
 echo "Reloading systemd, enabling sdeploy service..."
-sudo systemctl daemon-reload
-sudo systemctl enable sdeploy
+systemctl daemon-reload
+systemctl enable sdeploy
 
 echo "Starting sdeploy service..."
-sudo systemctl start sdeploy
+systemctl start sdeploy
 
 echo "Checking sdeploy service status..."
-sudo systemctl status sdeploy
+systemctl status sdeploy
 
 echo "Install complete."
