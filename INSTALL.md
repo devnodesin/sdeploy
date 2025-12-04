@@ -61,6 +61,40 @@ sudo cp samples/sdeploy.conf /etc/sdeploy.conf
 sudo cp samples/sdeploy.service /etc/systemd/system/sdeploy.service
 ```
 
+### SSH Key Setup (for private repositories):
+
+If you need to deploy from private git repositories, set up SSH keys:
+
+```sh
+# Create directory for SSH keys
+sudo mkdir -p /etc/sdeploy/keys
+sudo chmod 700 /etc/sdeploy/keys
+
+# Generate a deploy key (ED25519 recommended)
+sudo ssh-keygen -t ed25519 -C "sdeploy-deploy-key" -f /etc/sdeploy/keys/deploy-key -N ""
+
+# Set proper permissions
+sudo chmod 600 /etc/sdeploy/keys/deploy-key
+sudo chmod 644 /etc/sdeploy/keys/deploy-key.pub
+
+# Display public key to add to your repository
+sudo cat /etc/sdeploy/keys/deploy-key.pub
+```
+
+Then add the public key to your repository:
+- **GitHub**: Settings → Deploy keys → Add deploy key
+- **GitLab**: Settings → Repository → Deploy Keys → Add key
+- **Bitbucket**: Repository settings → Access keys → Add key
+
+Update your config to use the key:
+```yaml
+projects:
+  - name: Private Project
+    git_repo: git@github.com:myorg/private-repo.git
+    git_ssh_key_path: /etc/sdeploy/keys/deploy-key
+    # ... other config
+```
+
 ### systemctl Service:
 
 ```sh

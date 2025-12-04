@@ -1,8 +1,10 @@
 package main
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -402,5 +404,135 @@ projects:
 
 	if cfg.Projects[0].GitBranch != "develop" {
 		t.Errorf("Expected GitBranch 'develop', got '%s'", cfg.Projects[0].GitBranch)
+	}
+}
+
+// TestLoadConfigWithGitSSHKeyPath tests loading config with git_ssh_key_path
+func TestLoadConfigWithGitSSHKeyPath(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "sdeploy.conf")
+	keyPath := filepath.Join(tmpDir, "test-key")
+
+	// Create a dummy SSH key file
+	err := os.WriteFile(keyPath, []byte("dummy-key-content"), 0600)
+	if err != nil {
+		t.Fatalf("Failed to create test SSH key file: %v", err)
+	}
+
+	configWithSSHKey := fmt.Sprintf(`
+listen_port: 8080
+projects:
+  - name: Frontend
+    webhook_path: /hooks/frontend
+    webhook_secret: secret_token_123
+    git_repo: git@github.com:myorg/repo.git
+    git_ssh_key_path: %s
+    execute_command: sh deploy.sh
+`, keyPath)
+
+	err = os.WriteFile(configPath, []byte(configWithSSHKey), 0644)
+	if err != nil {
+		t.Fatalf("Failed to create test config file: %v", err)
+	}
+
+	cfg, err := LoadConfig(configPath)
+	if err != nil {
+		t.Fatalf("LoadConfig failed: %v", err)
+	}
+
+	if cfg.Projects[0].GitSSHKeyPath != keyPath {
+		t.Errorf("Expected GitSSHKeyPath '%s', got '%s'", keyPath, cfg.Projects[0].GitSSHKeyPath)
+	}
+}
+
+// TestValidateSSHKeyPath tests SSH key path validation
+func TestValidateSSHKeyPath(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	t.Run("valid key file", func(t *testing.T) {
+		keyPath := filepath.Join(tmpDir, "valid-key")
+		err := os.WriteFile(keyPath, []byte("dummy-key"), 0600)
+		if err != nil {
+			t.Fatalf("Failed to create test key file: %v", err)
+		}
+
+		err = validateSSHKeyPath(keyPath)
+		if err != nil {
+			t.Errorf("Expected no error for valid key file, got: %v", err)
+		}
+	})
+
+	t.Run("non-existent key file", func(t *testing.T) {
+		keyPath := filepath.Join(tmpDir, "nonexistent-key")
+		err := validateSSHKeyPath(keyPath)
+		if err == nil {
+			t.Error("Expected error for non-existent key file, got nil")
+		}
+		if err != nil && !strings.Contains(err.Error(), "does not exist") {
+			t.Errorf("Expected 'does not exist' error, got: %v", err)
+		}
+	})
+
+	t.Run("directory instead of file", func(t *testing.T) {
+		dirPath := filepath.Join(tmpDir, "key-dir")
+		err := os.MkdirAll(dirPath, 0755)
+		if err != nil {
+			t.Fatalf("Failed to create test directory: %v", err)
+		}
+
+		err = validateSSHKeyPath(dirPath)
+		if err == nil {
+			t.Error("Expected error for directory, got nil")
+		}
+		if err != nil && !strings.Contains(err.Error(), "must be a file") {
+			t.Errorf("Expected 'must be a file' error, got: %v", err)
+		}
+	})
+
+	t.Run("unreadable key file", func(t *testing.T) {
+		// Create a file with no read permissions
+		keyPath := filepath.Join(tmpDir, "unreadable-key")
+		err := os.WriteFile(keyPath, []byte("dummy-key"), 0000)
+		if err != nil {
+			t.Fatalf("Failed to create test key file: %v", err)
+		}
+
+		err = validateSSHKeyPath(keyPath)
+		if err == nil {
+			t.Error("Expected error for unreadable key file, got nil")
+		}
+		if err != nil && !strings.Contains(err.Error(), "not readable") {
+			t.Errorf("Expected 'not readable' error, got: %v", err)
+		}
+	})
+}
+
+// TestLoadConfigInvalidSSHKeyPath tests validation error for invalid SSH key path
+func TestLoadConfigInvalidSSHKeyPath(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "sdeploy.conf")
+
+	configWithInvalidKey := `
+listen_port: 8080
+projects:
+  - name: Frontend
+    webhook_path: /hooks/frontend
+    webhook_secret: secret_token_123
+    git_repo: git@github.com:myorg/repo.git
+    git_ssh_key_path: /nonexistent/key/path
+    execute_command: sh deploy.sh
+`
+
+	err := os.WriteFile(configPath, []byte(configWithInvalidKey), 0644)
+	if err != nil {
+		t.Fatalf("Failed to create test config file: %v", err)
+	}
+
+	_, err = LoadConfig(configPath)
+	if err == nil {
+		t.Error("Expected error for invalid SSH key path, got nil")
+	}
+	if err != nil && !strings.Contains(err.Error(), "git_ssh_key_path") {
+		t.Errorf("Expected error message to mention git_ssh_key_path, got: %v", err)
 	}
 }

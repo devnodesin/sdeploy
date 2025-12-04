@@ -72,6 +72,7 @@ SDeploy uses YAML format for configuration:
 | `local_path`      | Local directory for git operations                |
 | `execute_path`    | Working directory for command (defaults to local_path) |
 | `git_update`      | Run `git pull` before deployment                  |
+| `git_ssh_key_path`| Path to SSH private key for git operations        |
 | `email_recipients`| Notification email addresses                      |
 
 ## Pre-flight Directory Checks
@@ -83,6 +84,74 @@ SDeploy automatically handles directory setup before each deployment:
 - **Logging**: All directory operations are logged for transparency
 
 This eliminates manual setup steps and ensures deployments work correctly from the first run.
+
+## Using Private Repositories
+
+SDeploy supports deploying from private git repositories using SSH key authentication.
+
+### Setup
+
+1. **Generate a deploy key** (or use an existing SSH key):
+   ```sh
+   ssh-keygen -t ed25519 -C "sdeploy-deploy-key" -f /etc/sdeploy/keys/deploy-key -N ""
+   ```
+
+2. **Set strict permissions** on the private key:
+   ```sh
+   chmod 600 /etc/sdeploy/keys/deploy-key
+   ```
+
+3. **Add the public key to your repository**:
+   - GitHub: Settings → Deploy keys → Add deploy key
+   - GitLab: Settings → Repository → Deploy Keys → Add key
+   - Copy the contents of `/etc/sdeploy/keys/deploy-key.pub`
+
+4. **Configure SDeploy** to use the key:
+   ```yaml
+   projects:
+     - name: Private Backend
+       webhook_path: /hooks/backend
+       webhook_secret: your_secret_here
+       git_repo: git@github.com:myorg/private-repo.git
+       git_ssh_key_path: /etc/sdeploy/keys/deploy-key
+       git_branch: main
+       git_update: true
+       local_path: /var/repo/backend
+       execute_command: npm install && npm run build
+   ```
+
+### Public Repositories
+
+For public repositories, you can omit `git_ssh_key_path`:
+
+```yaml
+projects:
+  - name: Public Frontend
+    webhook_path: /hooks/frontend
+    webhook_secret: your_secret_here
+    git_repo: https://github.com/myorg/public-repo.git
+    git_branch: main
+    git_update: true
+    local_path: /var/repo/frontend
+    execute_command: npm install && npm run build
+```
+
+### Troubleshooting SSH Keys
+
+| Issue | Solution |
+|-------|----------|
+| `SSH key validation failed: file does not exist` | Verify the path in `git_ssh_key_path` is correct and the file exists |
+| `SSH key validation failed: not readable` | Check file permissions: `chmod 600 /path/to/key` |
+| `Git clone failed` with authentication error | Verify the public key is added to your repository's deploy keys |
+| `Host key verification failed` | The SSH option `StrictHostKeyChecking=accept-new` is used automatically to accept new host keys |
+
+### Security Best Practices
+
+- Use read-only deploy keys when possible
+- Store SSH keys in a secure location (e.g., `/etc/sdeploy/keys/`)
+- Set file permissions to `600` (owner read/write only)
+- Never commit SSH private keys to version control
+- Rotate deploy keys regularly
 
 ## Triggering Deployments
 

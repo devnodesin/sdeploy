@@ -852,3 +852,199 @@ func TestDirectoryPermissionsWithUmask(t *testing.T) {
 		t.Errorf("Expected directory to be readable/executable by group and others, got permissions: %o", perm)
 	}
 }
+
+// TestDeployWithSSHKey tests deployment with git_ssh_key_path configured
+func TestDeployWithSSHKey(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create a dummy SSH key file
+	keyPath := filepath.Join(tmpDir, "test-key")
+	err := os.WriteFile(keyPath, []byte("dummy-ssh-key"), 0600)
+	if err != nil {
+		t.Fatalf("Failed to create test SSH key file: %v", err)
+	}
+
+	// Create a .git directory to simulate an already cloned repo
+	repoPath := filepath.Join(tmpDir, "repo")
+	gitDir := filepath.Join(repoPath, ".git")
+	if err := os.MkdirAll(gitDir, 0755); err != nil {
+		t.Fatalf("Failed to create .git directory: %v", err)
+	}
+
+	var buf bytes.Buffer
+	logger := NewLogger(&buf, "", false)
+	deployer := NewDeployer(logger)
+
+	project := &ProjectConfig{
+		Name:           "TestProject",
+		WebhookPath:    "/hooks/test",
+		GitRepo:        "git@github.com:example/repo.git",
+		LocalPath:      repoPath,
+		GitBranch:      "main",
+		GitUpdate:      false, // Don't try to pull
+		GitSSHKeyPath:  keyPath,
+		ExecutePath:    repoPath,
+		ExecuteCommand: "echo test",
+	}
+
+	result := deployer.Deploy(context.Background(), project, "WEBHOOK")
+
+	logOutput := buf.String()
+
+	// Should see SSH key usage logged (without revealing the path)
+	if !strings.Contains(logOutput, "Using SSH key for git operations") {
+		t.Errorf("Expected log to contain 'Using SSH key for git operations', got: %s", logOutput)
+	}
+
+	// Build config should show SSH key is configured
+	if !strings.Contains(logOutput, "git_ssh_key=configured") {
+		t.Errorf("Expected build config to show git_ssh_key=configured, got: %s", logOutput)
+	}
+
+	if !result.Success {
+		t.Errorf("Expected deployment to succeed, got error: %s", result.Error)
+	}
+}
+
+// TestDeployWithoutSSHKey tests deployment without git_ssh_key_path (public repo)
+func TestDeployWithoutSSHKey(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create a .git directory to simulate an already cloned repo
+	repoPath := filepath.Join(tmpDir, "repo")
+	gitDir := filepath.Join(repoPath, ".git")
+	if err := os.MkdirAll(gitDir, 0755); err != nil {
+		t.Fatalf("Failed to create .git directory: %v", err)
+	}
+
+	var buf bytes.Buffer
+	logger := NewLogger(&buf, "", false)
+	deployer := NewDeployer(logger)
+
+	project := &ProjectConfig{
+		Name:           "TestProject",
+		WebhookPath:    "/hooks/test",
+		GitRepo:        "https://github.com/example/public-repo.git",
+		LocalPath:      repoPath,
+		GitBranch:      "main",
+		GitUpdate:      false,
+		ExecutePath:    repoPath,
+		ExecuteCommand: "echo test",
+	}
+
+	result := deployer.Deploy(context.Background(), project, "WEBHOOK")
+
+	logOutput := buf.String()
+
+	// Should NOT see SSH key usage logged
+	if strings.Contains(logOutput, "Using SSH key:") {
+		t.Errorf("Expected log to NOT contain 'Using SSH key:', got: %s", logOutput)
+	}
+
+	// Build config should show SSH key is none
+	if !strings.Contains(logOutput, "git_ssh_key=none") {
+		t.Errorf("Expected build config to show git_ssh_key=none, got: %s", logOutput)
+	}
+
+	if !result.Success {
+		t.Errorf("Expected deployment to succeed, got error: %s", result.Error)
+	}
+}
+
+// TestDeploySSHKeyValidationError tests deployment fails when SSH key is invalid
+func TestDeploySSHKeyValidationError(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	var buf bytes.Buffer
+	logger := NewLogger(&buf, "", false)
+	deployer := NewDeployer(logger)
+
+	project := &ProjectConfig{
+		Name:           "TestProject",
+		WebhookPath:    "/hooks/test",
+		GitRepo:        "git@github.com:example/repo.git",
+		LocalPath:      tmpDir,
+		GitBranch:      "main",
+		GitSSHKeyPath:  "/nonexistent/key/path",
+		ExecutePath:    tmpDir,
+		ExecuteCommand: "echo test",
+	}
+
+	result := deployer.Deploy(context.Background(), project, "WEBHOOK")
+
+	if result.Success {
+		t.Error("Expected deployment to fail with invalid SSH key path")
+	}
+
+	if !strings.Contains(result.Error, "SSH key validation failed") {
+		t.Errorf("Expected error message about SSH key validation, got: %s", result.Error)
+	}
+
+	logOutput := buf.String()
+	if !strings.Contains(logOutput, "SSH key validation failed") {
+		t.Errorf("Expected log to contain SSH key validation error, got: %s", logOutput)
+	}
+}
+
+// TestDeploySSHKeyMissingFile tests deployment fails when SSH key file doesn't exist
+func TestDeploySSHKeyMissingFile(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	deployer := NewDeployer(nil)
+
+	project := &ProjectConfig{
+		Name:           "TestProject",
+		WebhookPath:    "/hooks/test",
+		GitRepo:        "git@github.com:example/repo.git",
+		LocalPath:      tmpDir,
+		GitBranch:      "main",
+		GitSSHKeyPath:  filepath.Join(tmpDir, "missing-key"),
+		ExecutePath:    tmpDir,
+		ExecuteCommand: "echo test",
+	}
+
+	result := deployer.Deploy(context.Background(), project, "WEBHOOK")
+
+	if result.Success {
+		t.Error("Expected deployment to fail with missing SSH key file")
+	}
+
+	if !strings.Contains(result.Error, "does not exist") {
+		t.Errorf("Expected error message about missing file, got: %s", result.Error)
+	}
+}
+
+// TestDeploySSHKeyBadPermissions tests deployment fails when SSH key has wrong permissions
+func TestDeploySSHKeyBadPermissions(t *testing.T) {
+	tmpDir := t.TempDir()
+	keyPath := filepath.Join(tmpDir, "test-key")
+
+	// Create a key file with no read permissions
+	err := os.WriteFile(keyPath, []byte("dummy-key"), 0000)
+	if err != nil {
+		t.Fatalf("Failed to create test SSH key file: %v", err)
+	}
+
+	deployer := NewDeployer(nil)
+
+	project := &ProjectConfig{
+		Name:           "TestProject",
+		WebhookPath:    "/hooks/test",
+		GitRepo:        "git@github.com:example/repo.git",
+		LocalPath:      tmpDir,
+		GitBranch:      "main",
+		GitSSHKeyPath:  keyPath,
+		ExecutePath:    tmpDir,
+		ExecuteCommand: "echo test",
+	}
+
+	result := deployer.Deploy(context.Background(), project, "WEBHOOK")
+
+	if result.Success {
+		t.Error("Expected deployment to fail with unreadable SSH key file")
+	}
+
+	if !strings.Contains(result.Error, "not readable") {
+		t.Errorf("Expected error message about unreadable file, got: %s", result.Error)
+	}
+}
