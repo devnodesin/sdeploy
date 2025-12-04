@@ -207,7 +207,7 @@ func (d *Deployer) handleGitOperations(ctx context.Context, project *ProjectConf
 			return fmt.Errorf("SSH key validation failed: %v", err)
 		}
 		if d.logger != nil {
-			d.logger.Infof(project.Name, "Using SSH key: %s", project.GitSSHKeyPath)
+			d.logger.Infof(project.Name, "Using SSH key for git operations")
 		}
 	}
 
@@ -260,6 +260,11 @@ func isGitRepo(path string) bool {
 	return info.IsDir()
 }
 
+// buildGitSSHCommand creates the SSH command string for git operations
+func buildGitSSHCommand(sshKeyPath string) string {
+	return fmt.Sprintf("ssh -i %s -o StrictHostKeyChecking=accept-new -o IdentitiesOnly=yes", sshKeyPath)
+}
+
 // gitClone clones a git repository to the specified local path
 func (d *Deployer) gitClone(ctx context.Context, project *ProjectConfig) error {
 	// Create parent directories if they don't exist
@@ -281,8 +286,7 @@ func (d *Deployer) gitClone(ctx context.Context, project *ProjectConfig) error {
 
 	// Set GIT_SSH_COMMAND if git_ssh_key_path is configured
 	if project.GitSSHKeyPath != "" {
-		sshCmd := fmt.Sprintf("ssh -i %s -o StrictHostKeyChecking=accept-new -o IdentitiesOnly=yes", project.GitSSHKeyPath)
-		cmd.Env = append(os.Environ(), fmt.Sprintf("GIT_SSH_COMMAND=%s", sshCmd))
+		cmd.Env = append(os.Environ(), fmt.Sprintf("GIT_SSH_COMMAND=%s", buildGitSSHCommand(project.GitSSHKeyPath)))
 	}
 
 	output, err := cmd.CombinedOutput()
@@ -315,8 +319,7 @@ func (d *Deployer) gitPull(ctx context.Context, project *ProjectConfig) error {
 
 	// Set GIT_SSH_COMMAND if git_ssh_key_path is configured
 	if project.GitSSHKeyPath != "" {
-		sshCmd := fmt.Sprintf("ssh -i %s -o StrictHostKeyChecking=accept-new -o IdentitiesOnly=yes", project.GitSSHKeyPath)
-		cmd.Env = append(os.Environ(), fmt.Sprintf("GIT_SSH_COMMAND=%s", sshCmd))
+		cmd.Env = append(os.Environ(), fmt.Sprintf("GIT_SSH_COMMAND=%s", buildGitSSHCommand(project.GitSSHKeyPath)))
 	}
 
 	output, err := cmd.CombinedOutput()

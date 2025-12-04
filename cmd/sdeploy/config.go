@@ -150,13 +150,6 @@ func validateSSHKeyPath(keyPath string) error {
 	}
 	file.Close()
 
-	// Warn about insecure permissions (not a validation error, just a warning)
-	mode := info.Mode()
-	if mode.Perm()&0077 != 0 {
-		// File has group or other permissions - this is a security risk
-		// We don't fail validation but this should be logged when the config is loaded
-	}
-
 	return nil
 }
 

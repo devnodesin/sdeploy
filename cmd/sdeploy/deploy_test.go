@@ -891,14 +891,9 @@ func TestDeployWithSSHKey(t *testing.T) {
 
 	logOutput := buf.String()
 
-	// Should see SSH key usage logged
-	if !strings.Contains(logOutput, "Using SSH key:") {
-		t.Errorf("Expected log to contain 'Using SSH key:', got: %s", logOutput)
-	}
-
-	// Should see the key path logged (but not the key contents)
-	if !strings.Contains(logOutput, keyPath) {
-		t.Errorf("Expected log to contain key path '%s', got: %s", keyPath, logOutput)
+	// Should see SSH key usage logged (without revealing the path)
+	if !strings.Contains(logOutput, "Using SSH key for git operations") {
+		t.Errorf("Expected log to contain 'Using SSH key for git operations', got: %s", logOutput)
 	}
 
 	// Build config should show SSH key is configured
