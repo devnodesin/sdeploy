@@ -179,12 +179,18 @@ func (d *Deployer) logBuildConfig(project *ProjectConfig) {
 	if d.logger == nil {
 		return
 	}
-	d.logger.Infof(project.Name, "Build config: name=%s, local_path=%s, git_repo=%s, git_branch=%s, git_update=%t, execute_path=%s, execute_command=%s",
+	// Don't log the actual SSH key path for security - just indicate if one is configured
+	sshKeyStatus := "none"
+	if project.GitSSHKeyPath != "" {
+		sshKeyStatus = "configured"
+	}
+	d.logger.Infof(project.Name, "Build config: name=%s, local_path=%s, git_repo=%s, git_branch=%s, git_update=%t, git_ssh_key=%s, execute_path=%s, execute_command=%s",
 		project.Name,
 		project.LocalPath,
 		project.GitRepo,
 		project.GitBranch,
 		project.GitUpdate,
+		sshKeyStatus,
 		project.ExecutePath,
 		project.ExecuteCommand,
 	)
@@ -192,10 +198,23 @@ func (d *Deployer) logBuildConfig(project *ProjectConfig) {
 
 // handleGitOperations handles git clone/pull based on configuration
 func (d *Deployer) handleGitOperations(ctx context.Context, project *ProjectConfig) error {
+	// Validate SSH key if configured
+	if project.GitSSHKeyPath != "" {
+		if err := validateSSHKeyPath(project.GitSSHKeyPath); err != nil {
+			if d.logger != nil {
+				d.logger.Errorf(project.Name, "SSH key validation failed: %v", err)
+			}
+			return fmt.Errorf("SSH key validation failed: %v", err)
+		}
+		if d.logger != nil {
+			d.logger.Infof(project.Name, "Using SSH key: %s", project.GitSSHKeyPath)
+		}
+	}
+
 	// Check if local_path exists and is a git repo
 	if !isGitRepo(project.LocalPath) {
 		// Need to clone
-		if err := d.gitClone(ctx, project.Name, project.GitRepo, project.LocalPath, project.GitBranch); err != nil {
+		if err := d.gitClone(ctx, project); err != nil {
 			if d.logger != nil {
 				d.logger.Errorf(project.Name, "Git clone failed: %v", err)
 			}
@@ -242,16 +261,16 @@ func isGitRepo(path string) bool {
 }
 
 // gitClone clones a git repository to the specified local path
-func (d *Deployer) gitClone(ctx context.Context, projectName, repoURL, localPath, branch string) error {
+func (d *Deployer) gitClone(ctx context.Context, project *ProjectConfig) error {
 	// Create parent directories if they don't exist
-	parentDir := filepath.Dir(localPath)
-	if err := ensureParentDirExists(ctx, parentDir, d.logger, projectName); err != nil {
+	parentDir := filepath.Dir(project.LocalPath)
+	if err := ensureParentDirExists(ctx, parentDir, d.logger, project.Name); err != nil {
 		return fmt.Errorf("failed to create parent directory: %v", err)
 	}
 
-	gitCmd := fmt.Sprintf("git clone --branch %s %s %s", branch, repoURL, localPath)
+	gitCmd := fmt.Sprintf("git clone --branch %s %s %s", project.GitBranch, project.GitRepo, project.LocalPath)
 	if d.logger != nil {
-		d.logger.Infof(projectName, "Running: %s", gitCmd)
+		d.logger.Infof(project.Name, "Running: %s", gitCmd)
 	}
 
 	// Build the command
@@ -260,10 +279,16 @@ func (d *Deployer) gitClone(ctx context.Context, projectName, repoURL, localPath
 	// Set process group so we can kill all child processes
 	setProcessGroup(cmd)
 
+	// Set GIT_SSH_COMMAND if git_ssh_key_path is configured
+	if project.GitSSHKeyPath != "" {
+		sshCmd := fmt.Sprintf("ssh -i %s -o StrictHostKeyChecking=accept-new -o IdentitiesOnly=yes", project.GitSSHKeyPath)
+		cmd.Env = append(os.Environ(), fmt.Sprintf("GIT_SSH_COMMAND=%s", sshCmd))
+	}
+
 	output, err := cmd.CombinedOutput()
 
 	if d.logger != nil && len(output) > 0 {
-		d.logger.Infof(projectName, "Output: %s", strings.TrimSpace(string(output)))
+		d.logger.Infof(project.Name, "Output: %s", strings.TrimSpace(string(output)))
 	}
 
 	if err != nil {
@@ -287,6 +312,12 @@ func (d *Deployer) gitPull(ctx context.Context, project *ProjectConfig) error {
 	setProcessGroup(cmd)
 
 	cmd.Dir = project.LocalPath
+
+	// Set GIT_SSH_COMMAND if git_ssh_key_path is configured
+	if project.GitSSHKeyPath != "" {
+		sshCmd := fmt.Sprintf("ssh -i %s -o StrictHostKeyChecking=accept-new -o IdentitiesOnly=yes", project.GitSSHKeyPath)
+		cmd.Env = append(os.Environ(), fmt.Sprintf("GIT_SSH_COMMAND=%s", sshCmd))
+	}
 
 	output, err := cmd.CombinedOutput()
 

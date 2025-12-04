@@ -166,6 +166,7 @@ SDeploy uses YAML format for configuration.
 | `git_branch`      | string   | No       | `"main"`     | Branch required to trigger deployment          |
 | `execute_command` | string   | Yes      | —            | Shell command to execute                       |
 | `git_update`      | bool     | No       | `false`      | Run `git pull` before deployment               |
+| `git_ssh_key_path`| string   | No       | —            | Path to SSH private key for git operations     |
 | `timeout_seconds` | int      | No       | `0`          | Command timeout (0 = no timeout)               |
 | `email_recipients`| []string | No       | —            | Notification email addresses                   |
 
@@ -175,6 +176,34 @@ SDeploy uses YAML format for configuration.
 - If `git_repo` is **set** and repo not cloned: Clone the repository.
 - If `git_repo` is **set** and repo exists: Skip cloning.
 - If `git_update` is `true`: Run `git pull` before deployment.
+
+### Git SSH Key Authentication
+
+SDeploy supports per-project SSH key authentication for private git repositories through the `git_ssh_key_path` configuration option.
+
+**Configuration:**
+
+- Set `git_ssh_key_path` to the absolute path of an SSH private key file.
+- If `git_ssh_key_path` is set, all git operations (clone, pull) for that project will use the specified key.
+- If `git_ssh_key_path` is not set, git operations use the default system SSH agent (suitable for public repos or user-managed keys).
+
+**Requirements:**
+
+- The SSH key file must exist and be readable by the SDeploy process.
+- SSH key file should have strict permissions (`chmod 600`) for security.
+- The SSH key must be authorized to access the git repository (e.g., added as a deploy key on GitHub).
+
+**Error Handling:**
+
+- If `git_ssh_key_path` is set but the file doesn't exist, deployment fails with a clear error message.
+- If the file exists but is not readable, deployment fails with a permission error.
+- Git operation failures (authentication, network) are logged with detailed error messages.
+
+**Security:**
+
+- Key file contents are never logged or exposed.
+- Users should set strict file permissions on SSH keys (`chmod 600`).
+- Deploy keys should be scoped to read-only access when possible.
 
 ## 🛠️ Key Features
 

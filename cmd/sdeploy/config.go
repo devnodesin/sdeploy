@@ -45,6 +45,7 @@ type ProjectConfig struct {
 	GitBranch       string   `yaml:"git_branch"`
 	ExecuteCommand  string   `yaml:"execute_command"`
 	GitUpdate       bool     `yaml:"git_update"`
+	GitSSHKeyPath   string   `yaml:"git_ssh_key_path"`
 	TimeoutSeconds  int      `yaml:"timeout_seconds"`
 	EmailRecipients []string `yaml:"email_recipients"`
 }
@@ -114,6 +115,46 @@ func validateConfig(cfg *Config) error {
 		if project.GitBranch == "" {
 			project.GitBranch = Defaults.GitBranch
 		}
+
+		// Validate git_ssh_key_path if provided
+		if project.GitSSHKeyPath != "" {
+			if err := validateSSHKeyPath(project.GitSSHKeyPath); err != nil {
+				return fmt.Errorf("project %d (%s): %v", i+1, project.Name, err)
+			}
+		}
+	}
+
+	return nil
+}
+
+// validateSSHKeyPath validates that the SSH key file exists and is readable
+func validateSSHKeyPath(keyPath string) error {
+	// Check if file exists
+	info, err := os.Stat(keyPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return fmt.Errorf("git_ssh_key_path file does not exist: %s", keyPath)
+		}
+		return fmt.Errorf("git_ssh_key_path file error: %v", err)
+	}
+
+	// Check if it's a file (not a directory)
+	if info.IsDir() {
+		return fmt.Errorf("git_ssh_key_path must be a file, not a directory: %s", keyPath)
+	}
+
+	// Check if file is readable
+	file, err := os.Open(keyPath)
+	if err != nil {
+		return fmt.Errorf("git_ssh_key_path file is not readable: %v", err)
+	}
+	file.Close()
+
+	// Warn about insecure permissions (not a validation error, just a warning)
+	mode := info.Mode()
+	if mode.Perm()&0077 != 0 {
+		// File has group or other permissions - this is a security risk
+		// We don't fail validation but this should be logged when the config is loaded
 	}
 
 	return nil
