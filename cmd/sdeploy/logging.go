@@ -58,7 +58,7 @@ func NewLogger(writer io.Writer, filePath string, daemonMode bool) *Logger {
 	}
 
 	// Open log file
-	file, err := os.OpenFile(logPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
+	file, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
 	if err != nil {
 		reportLogFileError("open/create file", logPath, err, "0644")
 		l.writer = os.Stderr
@@ -95,7 +95,8 @@ func reportLogFileError(operation, path string, err error, attemptedPerms string
 		fmt.Fprintf(os.Stderr, "    - Check disk space and filesystem status\n")
 	}
 
-	fmt.Fprintf(os.Stderr, "  Fallback: Logging to console (stderr)\n\n")
+	fmt.Fprintf(os.Stderr, "  Fallback: Logging to console (stderr)\n")
+	fmt.Fprintf(os.Stderr, "*******************************************************\n\n")
 }
 
 // reportFilePermissions attempts to report current file/directory permissions
