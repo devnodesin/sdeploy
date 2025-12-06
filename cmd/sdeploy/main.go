@@ -165,6 +165,8 @@ func logConfigSummary(logger *Logger, cfg *Config, daemonMode bool) {
 			logger.Infof("", "  - Timeout: %ds", project.TimeoutSeconds)
 		}
 		logger.Infof("", "  - Email Recipients: %d", len(project.EmailRecipients))
+		logger.Infof("", "-------------------------------------------------------")
+		logger.Infof("", "-------------------------------------------------------\n")
 	}
 }
 

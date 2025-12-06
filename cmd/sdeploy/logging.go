@@ -95,8 +95,7 @@ func reportLogFileError(operation, path string, err error, attemptedPerms string
 		fmt.Fprintf(os.Stderr, "    - Check disk space and filesystem status\n")
 	}
 
-	fmt.Fprintf(os.Stderr, "  Fallback: Logging to console (stderr)\n")
-	fmt.Fprintf(os.Stderr, "*******************************************************\n\n")
+	fmt.Fprintf(os.Stderr, "  Fallback: Logging to console (stderr)\n\n")
 }
 
 // reportFilePermissions attempts to report current file/directory permissions
