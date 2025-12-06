@@ -110,6 +110,8 @@ func (h *WebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Log the webhook receipt
 	if h.logger != nil {
 		h.logger.Infof(project.Name, "Received %s trigger for branch: %s", triggerSource, branch)
+		//print the full payload
+		h.logger.Infof(project.Name, "Payload: %s", string(body))
 	}
 
 	// Check branch match (for WEBHOOK triggers, we validate branch)
