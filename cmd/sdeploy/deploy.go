@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -223,6 +224,15 @@ func (d *Deployer) handleGitOperations(ctx context.Context, project *ProjectConf
 		if d.logger != nil {
 			d.logger.Infof(project.Name, "Cloned repository to %s", project.LocalPath)
 		}
+		
+		// After cloning, verify we're on the correct branch
+		// (the clone uses --branch flag, but we should verify)
+		if err := d.ensureCorrectBranch(ctx, project); err != nil {
+			if d.logger != nil {
+				d.logger.Errorf(project.Name, "Failed to checkout configured branch after clone: %v", err)
+			}
+			return fmt.Errorf("failed to checkout configured branch after clone: %v", err)
+		}
 	} else {
 		if d.logger != nil {
 			d.logger.Infof(project.Name, "Repository already cloned at %s", project.LocalPath)
@@ -341,12 +351,13 @@ func (d *Deployer) ensureCorrectBranch(ctx context.Context, project *ProjectConf
 
 // gitCheckout checks out the configured branch
 func (d *Deployer) gitCheckout(ctx context.Context, project *ProjectConfig) error {
-	gitCmd := fmt.Sprintf("git checkout %s", project.GitBranch)
 	if d.logger != nil {
-		d.logger.Infof(project.Name, "Running: %s", gitCmd)
+		d.logger.Infof(project.Name, "Running: git checkout %s", project.GitBranch)
 	}
 
-	cmd := buildCommand(ctx, gitCmd)
+	// Use exec.Command directly with separate arguments to avoid shell injection
+	// Even though branch name is validated, this is an extra layer of protection
+	cmd := exec.CommandContext(ctx, "git", "checkout", project.GitBranch)
 	setProcessGroup(cmd)
 	cmd.Dir = project.LocalPath
 
