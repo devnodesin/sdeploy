@@ -227,6 +227,15 @@ func (d *Deployer) handleGitOperations(ctx context.Context, project *ProjectConf
 		if d.logger != nil {
 			d.logger.Infof(project.Name, "Repository already cloned at %s", project.LocalPath)
 		}
+		
+		// Ensure we're on the correct branch before pulling or executing commands
+		if err := d.ensureCorrectBranch(ctx, project); err != nil {
+			if d.logger != nil {
+				d.logger.Errorf(project.Name, "Failed to checkout configured branch: %v", err)
+			}
+			return fmt.Errorf("failed to checkout configured branch: %v", err)
+		}
+		
 		// Check if we should do git pull
 		if project.GitUpdate {
 			if err := d.gitPull(ctx, project); err != nil {
@@ -258,6 +267,103 @@ func isGitRepo(path string) bool {
 		return false
 	}
 	return info.IsDir()
+}
+
+// getCurrentBranch returns the current git branch for a repository
+func getCurrentBranch(ctx context.Context, repoPath string) (string, error) {
+	cmd := buildCommand(ctx, "git rev-parse --abbrev-ref HEAD")
+	cmd.Dir = repoPath
+
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return "", fmt.Errorf("%v: %s", err, string(output))
+	}
+
+	branch := strings.TrimSpace(string(output))
+	return branch, nil
+}
+
+// isValidGitRepo checks if the path is a valid git repository by running a git command
+func isValidGitRepo(ctx context.Context, repoPath string) bool {
+	if !isGitRepo(repoPath) {
+		return false
+	}
+	// Try to run a git command to verify it's a valid repo
+	_, err := getCurrentBranch(ctx, repoPath)
+	return err == nil
+}
+
+// ensureCorrectBranch verifies and checks out the configured branch if needed
+func (d *Deployer) ensureCorrectBranch(ctx context.Context, project *ProjectConfig) error {
+	// Verify it's a valid git repository first
+	if !isValidGitRepo(ctx, project.LocalPath) {
+		if d.logger != nil {
+			d.logger.Warnf(project.Name, "Directory has .git but is not a valid git repository, skipping branch checkout")
+		}
+		return nil
+	}
+
+	// Get current branch
+	currentBranch, err := getCurrentBranch(ctx, project.LocalPath)
+	if err != nil {
+		return fmt.Errorf("failed to get current branch: %v", err)
+	}
+
+	if d.logger != nil {
+		d.logger.Infof(project.Name, "Current branch: %s, configured branch: %s", currentBranch, project.GitBranch)
+	}
+
+	// If already on the correct branch, nothing to do
+	if currentBranch == project.GitBranch {
+		if d.logger != nil {
+			d.logger.Infof(project.Name, "Already on correct branch: %s", currentBranch)
+		}
+		return nil
+	}
+
+	// Need to checkout the configured branch
+	if d.logger != nil {
+		d.logger.Infof(project.Name, "Checking out branch: %s", project.GitBranch)
+	}
+
+	if err := d.gitCheckout(ctx, project); err != nil {
+		return fmt.Errorf("failed to checkout branch %s: %v", project.GitBranch, err)
+	}
+
+	if d.logger != nil {
+		d.logger.Infof(project.Name, "Successfully checked out branch: %s", project.GitBranch)
+	}
+
+	return nil
+}
+
+// gitCheckout checks out the configured branch
+func (d *Deployer) gitCheckout(ctx context.Context, project *ProjectConfig) error {
+	gitCmd := fmt.Sprintf("git checkout %s", project.GitBranch)
+	if d.logger != nil {
+		d.logger.Infof(project.Name, "Running: %s", gitCmd)
+	}
+
+	cmd := buildCommand(ctx, gitCmd)
+	setProcessGroup(cmd)
+	cmd.Dir = project.LocalPath
+
+	// Set GIT_SSH_COMMAND if git_ssh_key_path is configured
+	if project.GitSSHKeyPath != "" {
+		cmd.Env = append(os.Environ(), fmt.Sprintf("GIT_SSH_COMMAND=%s", buildGitSSHCommand(project.GitSSHKeyPath)))
+	}
+
+	output, err := cmd.CombinedOutput()
+
+	if d.logger != nil && len(output) > 0 {
+		d.logger.Infof(project.Name, "Output: %s", strings.TrimSpace(string(output)))
+	}
+
+	if err != nil {
+		return fmt.Errorf("%v: %s", err, string(output))
+	}
+
+	return nil
 }
 
 // buildGitSSHCommand creates the SSH command string for git operations
