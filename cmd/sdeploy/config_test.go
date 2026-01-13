@@ -536,3 +536,90 @@ projects:
 		t.Errorf("Expected error message to mention git_ssh_key_path, got: %v", err)
 	}
 }
+
+// TestValidateGitBranchValid tests validateGitBranch with valid branch names
+func TestValidateGitBranchValid(t *testing.T) {
+	validBranches := []string{
+		"main",
+		"master",
+		"develop",
+		"feature/my-feature",
+		"release/v1.0.0",
+		"hotfix-123",
+		"user_branch",
+		"feature.test",
+		"123-numeric",
+	}
+
+	for _, branch := range validBranches {
+		t.Run(branch, func(t *testing.T) {
+			err := validateGitBranch(branch)
+			if err != nil {
+				t.Errorf("Expected branch '%s' to be valid, got error: %v", branch, err)
+			}
+		})
+	}
+}
+
+// TestValidateGitBranchInvalid tests validateGitBranch with invalid branch names
+func TestValidateGitBranchInvalid(t *testing.T) {
+	invalidBranches := []string{
+		"",                    // empty
+		"branch with spaces",  // spaces
+		"branch;rm -rf /",     // semicolon (command injection attempt)
+		"branch`whoami`",      // backticks (command injection attempt)
+		"branch$(whoami)",     // command substitution
+		"branch&&echo hi",     // shell operators
+		"branch|cat",          // pipe
+		"branch>file",         // redirection
+		"branch<file",         // redirection
+		"branch\necho hi",     // newline
+		"branch\techo hi",     // tab
+		"branch*",             // wildcard
+		"branch?",             // wildcard
+		"branch[",             // bracket
+		"branch]",             // bracket
+		"branch^",             // caret
+		"branch~",             // tilde
+		"branch:",             // colon
+	}
+
+	for _, branch := range invalidBranches {
+		t.Run(fmt.Sprintf("invalid_%s", branch), func(t *testing.T) {
+			err := validateGitBranch(branch)
+			if err == nil {
+				t.Errorf("Expected branch '%s' to be invalid, but got no error", branch)
+			}
+		})
+	}
+}
+
+// TestLoadConfigInvalidBranchName tests that config loading rejects invalid branch names
+func TestLoadConfigInvalidBranchName(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "sdeploy.conf")
+
+	configWithInvalidBranch := `
+listen_port: 8080
+projects:
+  - name: TestProject
+    webhook_path: /hooks/test
+    webhook_secret: secret_token_123
+    git_repo: git@github.com:myorg/repo.git
+    git_branch: "invalid;branch"
+    execute_command: sh deploy.sh
+`
+
+	err := os.WriteFile(configPath, []byte(configWithInvalidBranch), 0644)
+	if err != nil {
+		t.Fatalf("Failed to create test config file: %v", err)
+	}
+
+	_, err = LoadConfig(configPath)
+	if err == nil {
+		t.Error("Expected error for invalid git_branch, got nil")
+	}
+	if err != nil && !strings.Contains(err.Error(), "git_branch contains invalid character") {
+		t.Errorf("Expected error message about invalid git_branch character, got: %v", err)
+	}
+}

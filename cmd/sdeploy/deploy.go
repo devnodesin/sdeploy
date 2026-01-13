@@ -288,8 +288,10 @@ func isValidGitRepo(ctx context.Context, repoPath string) bool {
 	if !isGitRepo(repoPath) {
 		return false
 	}
-	// Try to run a git command to verify it's a valid repo
-	_, err := getCurrentBranch(ctx, repoPath)
+	// Use a lighter git command to verify repository validity
+	cmd := buildCommand(ctx, "git rev-parse --git-dir")
+	cmd.Dir = repoPath
+	err := cmd.Run()
 	return err == nil
 }
 
