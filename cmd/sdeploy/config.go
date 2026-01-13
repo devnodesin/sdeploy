@@ -116,11 +116,37 @@ func validateConfig(cfg *Config) error {
 			project.GitBranch = Defaults.GitBranch
 		}
 
+		// Validate git_branch format (basic validation to prevent command injection)
+		if err := validateGitBranch(project.GitBranch); err != nil {
+			return fmt.Errorf("project %d (%s): %v", i+1, project.Name, err)
+		}
+
 		// Validate git_ssh_key_path if provided
 		if project.GitSSHKeyPath != "" {
 			if err := validateSSHKeyPath(project.GitSSHKeyPath); err != nil {
 				return fmt.Errorf("project %d (%s): %v", i+1, project.Name, err)
 			}
+		}
+	}
+
+	return nil
+}
+
+// validateGitBranch validates that a git branch name is safe to use
+func validateGitBranch(branch string) error {
+	if branch == "" {
+		return fmt.Errorf("git_branch cannot be empty")
+	}
+
+	// Check for dangerous characters that could be used for command injection
+	// Git branch names cannot contain: space, ~, ^, :, ?, *, [, \, and some others
+	// We'll be restrictive and only allow alphanumeric, dash, underscore, slash, and dot
+	for _, char := range branch {
+		if !((char >= 'a' && char <= 'z') ||
+			(char >= 'A' && char <= 'Z') ||
+			(char >= '0' && char <= '9') ||
+			char == '-' || char == '_' || char == '/' || char == '.') {
+			return fmt.Errorf("git_branch contains invalid character '%c': branch names must only contain letters, numbers, dash, underscore, slash, or dot", char)
 		}
 	}
 

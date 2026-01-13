@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -1046,5 +1047,578 @@ func TestDeploySSHKeyBadPermissions(t *testing.T) {
 
 	if !strings.Contains(result.Error, "not readable") {
 		t.Errorf("Expected error message about unreadable file, got: %s", result.Error)
+	}
+}
+
+// TestGetCurrentBranch tests the getCurrentBranch function
+func TestGetCurrentBranch(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Initialize a git repo
+	cmd := exec.Command("git", "init")
+	cmd.Dir = tmpDir
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("Failed to init git repo: %v", err)
+	}
+
+	// Create initial commit (required to have a branch)
+	cmd = exec.Command("git", "config", "user.email", "test@example.com")
+	cmd.Dir = tmpDir
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("Failed to set git user email: %v", err)
+	}
+
+	cmd = exec.Command("git", "config", "user.name", "Test User")
+	cmd.Dir = tmpDir
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("Failed to set git user name: %v", err)
+	}
+
+	// Create a dummy file and commit
+	testFile := filepath.Join(tmpDir, "test.txt")
+	if err := os.WriteFile(testFile, []byte("test"), 0644); err != nil {
+		t.Fatalf("Failed to create test file: %v", err)
+	}
+
+	cmd = exec.Command("git", "add", "test.txt")
+	cmd.Dir = tmpDir
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("Failed to git add: %v", err)
+	}
+
+	cmd = exec.Command("git", "commit", "-m", "Initial commit")
+	cmd.Dir = tmpDir
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("Failed to git commit: %v", err)
+	}
+
+	// Test getting current branch
+	ctx := context.Background()
+	branch, err := getCurrentBranch(ctx, tmpDir)
+	if err != nil {
+		t.Fatalf("getCurrentBranch failed: %v", err)
+	}
+
+	// Branch should be either "main" or "master" depending on git config
+	if branch != "main" && branch != "master" {
+		t.Errorf("Expected branch to be 'main' or 'master', got: %s", branch)
+	}
+}
+
+// TestGetCurrentBranchNonRepo tests getCurrentBranch on non-repo directory
+func TestGetCurrentBranchNonRepo(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	ctx := context.Background()
+	_, err := getCurrentBranch(ctx, tmpDir)
+	if err == nil {
+		t.Error("Expected getCurrentBranch to fail on non-repo directory")
+	}
+}
+
+// TestEnsureCorrectBranchSameBranch tests ensureCorrectBranch when already on correct branch
+func TestEnsureCorrectBranchSameBranch(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Initialize a git repo
+	cmd := exec.Command("git", "init")
+	cmd.Dir = tmpDir
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("Failed to init git repo: %v", err)
+	}
+
+	cmd = exec.Command("git", "config", "user.email", "test@example.com")
+	cmd.Dir = tmpDir
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("Failed to set git user email: %v", err)
+	}
+
+	cmd = exec.Command("git", "config", "user.name", "Test User")
+	cmd.Dir = tmpDir
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("Failed to set git user name: %v", err)
+	}
+
+	// Create initial commit
+	testFile := filepath.Join(tmpDir, "test.txt")
+	if err := os.WriteFile(testFile, []byte("test"), 0644); err != nil {
+		t.Fatalf("Failed to create test file: %v", err)
+	}
+
+	cmd = exec.Command("git", "add", "test.txt")
+	cmd.Dir = tmpDir
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("Failed to git add: %v", err)
+	}
+
+	cmd = exec.Command("git", "commit", "-m", "Initial commit")
+	cmd.Dir = tmpDir
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("Failed to git commit: %v", err)
+	}
+
+	// Get current branch
+	ctx := context.Background()
+	currentBranch, err := getCurrentBranch(ctx, tmpDir)
+	if err != nil {
+		t.Fatalf("Failed to get current branch: %v", err)
+	}
+
+	var buf bytes.Buffer
+	logger := NewLogger(&buf, "", false)
+	deployer := NewDeployer(logger)
+
+	project := &ProjectConfig{
+		Name:      "TestProject",
+		LocalPath: tmpDir,
+		GitBranch: currentBranch, // Same as current branch
+	}
+
+	// Should succeed without doing anything
+	err = deployer.ensureCorrectBranch(ctx, project)
+	if err != nil {
+		t.Errorf("ensureCorrectBranch failed: %v", err)
+	}
+
+	logOutput := buf.String()
+	if !strings.Contains(logOutput, "Already on correct branch") {
+		t.Errorf("Expected log to contain 'Already on correct branch', got: %s", logOutput)
+	}
+}
+
+// TestEnsureCorrectBranchDifferentBranch tests ensureCorrectBranch when on different branch
+func TestEnsureCorrectBranchDifferentBranch(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Initialize a git repo
+	cmd := exec.Command("git", "init")
+	cmd.Dir = tmpDir
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("Failed to init git repo: %v", err)
+	}
+
+	cmd = exec.Command("git", "config", "user.email", "test@example.com")
+	cmd.Dir = tmpDir
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("Failed to set git user email: %v", err)
+	}
+
+	cmd = exec.Command("git", "config", "user.name", "Test User")
+	cmd.Dir = tmpDir
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("Failed to set git user name: %v", err)
+	}
+
+	// Create initial commit
+	testFile := filepath.Join(tmpDir, "test.txt")
+	if err := os.WriteFile(testFile, []byte("test"), 0644); err != nil {
+		t.Fatalf("Failed to create test file: %v", err)
+	}
+
+	cmd = exec.Command("git", "add", "test.txt")
+	cmd.Dir = tmpDir
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("Failed to git add: %v", err)
+	}
+
+	cmd = exec.Command("git", "commit", "-m", "Initial commit")
+	cmd.Dir = tmpDir
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("Failed to git commit: %v", err)
+	}
+
+	// Create a new branch
+	cmd = exec.Command("git", "checkout", "-b", "develop")
+	cmd.Dir = tmpDir
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("Failed to create develop branch: %v", err)
+	}
+
+	// Get current branch (should be "develop")
+	ctx := context.Background()
+	currentBranch, err := getCurrentBranch(ctx, tmpDir)
+	if err != nil {
+		t.Fatalf("Failed to get current branch: %v", err)
+	}
+
+	if currentBranch != "develop" {
+		t.Fatalf("Expected current branch to be 'develop', got: %s", currentBranch)
+	}
+
+	var buf bytes.Buffer
+	logger := NewLogger(&buf, "", false)
+	deployer := NewDeployer(logger)
+
+	// Determine the main branch name
+	cmd = exec.Command("git", "checkout", "-")
+	cmd.Dir = tmpDir
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("Failed to checkout previous branch: %v", err)
+	}
+
+	mainBranch, err := getCurrentBranch(ctx, tmpDir)
+	if err != nil {
+		t.Fatalf("Failed to get main branch: %v", err)
+	}
+
+	// Switch back to develop
+	cmd = exec.Command("git", "checkout", "develop")
+	cmd.Dir = tmpDir
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("Failed to checkout develop: %v", err)
+	}
+
+	project := &ProjectConfig{
+		Name:      "TestProject",
+		LocalPath: tmpDir,
+		GitBranch: mainBranch, // Different from current branch
+	}
+
+	// Should checkout the configured branch
+	err = deployer.ensureCorrectBranch(ctx, project)
+	if err != nil {
+		t.Errorf("ensureCorrectBranch failed: %v", err)
+	}
+
+	logOutput := buf.String()
+	if !strings.Contains(logOutput, "Checking out branch") {
+		t.Errorf("Expected log to contain 'Checking out branch', got: %s", logOutput)
+	}
+	if !strings.Contains(logOutput, "Successfully checked out branch") {
+		t.Errorf("Expected log to contain 'Successfully checked out branch', got: %s", logOutput)
+	}
+
+	// Verify we're now on the correct branch
+	finalBranch, err := getCurrentBranch(ctx, tmpDir)
+	if err != nil {
+		t.Fatalf("Failed to get final branch: %v", err)
+	}
+
+	if finalBranch != mainBranch {
+		t.Errorf("Expected to be on branch '%s', but on '%s'", mainBranch, finalBranch)
+	}
+}
+
+// TestEnsureCorrectBranchNonExistentBranch tests ensureCorrectBranch with non-existent branch
+func TestEnsureCorrectBranchNonExistentBranch(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Initialize a git repo
+	cmd := exec.Command("git", "init")
+	cmd.Dir = tmpDir
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("Failed to init git repo: %v", err)
+	}
+
+	cmd = exec.Command("git", "config", "user.email", "test@example.com")
+	cmd.Dir = tmpDir
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("Failed to set git user email: %v", err)
+	}
+
+	cmd = exec.Command("git", "config", "user.name", "Test User")
+	cmd.Dir = tmpDir
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("Failed to set git user name: %v", err)
+	}
+
+	// Create initial commit
+	testFile := filepath.Join(tmpDir, "test.txt")
+	if err := os.WriteFile(testFile, []byte("test"), 0644); err != nil {
+		t.Fatalf("Failed to create test file: %v", err)
+	}
+
+	cmd = exec.Command("git", "add", "test.txt")
+	cmd.Dir = tmpDir
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("Failed to git add: %v", err)
+	}
+
+	cmd = exec.Command("git", "commit", "-m", "Initial commit")
+	cmd.Dir = tmpDir
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("Failed to git commit: %v", err)
+	}
+
+	ctx := context.Background()
+	deployer := NewDeployer(nil)
+
+	project := &ProjectConfig{
+		Name:      "TestProject",
+		LocalPath: tmpDir,
+		GitBranch: "nonexistent-branch",
+	}
+
+	// Should fail
+	err := deployer.ensureCorrectBranch(ctx, project)
+	if err == nil {
+		t.Error("Expected ensureCorrectBranch to fail with non-existent branch")
+	}
+
+	if !strings.Contains(err.Error(), "failed to checkout branch") {
+		t.Errorf("Expected error about failed checkout, got: %v", err)
+	}
+}
+
+// TestDeployWithBranchCheckout tests full deployment with branch checkout
+func TestDeployWithBranchCheckout(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Initialize a git repo
+	cmd := exec.Command("git", "init")
+	cmd.Dir = tmpDir
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("Failed to init git repo: %v", err)
+	}
+
+	cmd = exec.Command("git", "config", "user.email", "test@example.com")
+	cmd.Dir = tmpDir
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("Failed to set git user email: %v", err)
+	}
+
+	cmd = exec.Command("git", "config", "user.name", "Test User")
+	cmd.Dir = tmpDir
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("Failed to set git user name: %v", err)
+	}
+
+	// Create initial commit
+	testFile := filepath.Join(tmpDir, "test.txt")
+	if err := os.WriteFile(testFile, []byte("test"), 0644); err != nil {
+		t.Fatalf("Failed to create test file: %v", err)
+	}
+
+	cmd = exec.Command("git", "add", "test.txt")
+	cmd.Dir = tmpDir
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("Failed to git add: %v", err)
+	}
+
+	cmd = exec.Command("git", "commit", "-m", "Initial commit")
+	cmd.Dir = tmpDir
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("Failed to git commit: %v", err)
+	}
+
+	// Get the initial branch name
+	ctx := context.Background()
+	initialBranch, err := getCurrentBranch(ctx, tmpDir)
+	if err != nil {
+		t.Fatalf("Failed to get initial branch: %v", err)
+	}
+
+	// Create and switch to a different branch
+	cmd = exec.Command("git", "checkout", "-b", "feature-branch")
+	cmd.Dir = tmpDir
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("Failed to create feature branch: %v", err)
+	}
+
+	var buf bytes.Buffer
+	logger := NewLogger(&buf, "", false)
+	deployer := NewDeployer(logger)
+
+	project := &ProjectConfig{
+		Name:           "TestProject",
+		WebhookPath:    "/hooks/test",
+		GitRepo:        "dummy-repo", // Set git_repo to trigger git operations
+		LocalPath:      tmpDir,
+		GitBranch:      initialBranch, // Configure to use initial branch
+		GitUpdate:      false,
+		ExecutePath:    tmpDir,
+		ExecuteCommand: "echo 'deployed'",
+	}
+
+	result := deployer.Deploy(ctx, project, "WEBHOOK")
+
+	if !result.Success {
+		t.Errorf("Expected deployment to succeed, got error: %s", result.Error)
+	}
+
+	logOutput := buf.String()
+
+	// Should see branch checkout logging
+	if !strings.Contains(logOutput, "Checking out branch") {
+		t.Errorf("Expected log to contain 'Checking out branch', got: %s", logOutput)
+	}
+
+	// Verify we're now on the correct branch
+	finalBranch, err := getCurrentBranch(ctx, tmpDir)
+	if err != nil {
+		t.Fatalf("Failed to get final branch: %v", err)
+	}
+
+	if finalBranch != initialBranch {
+		t.Errorf("Expected to be on branch '%s', but on '%s'", initialBranch, finalBranch)
+	}
+}
+
+// TestBranchLoggedInBuildConfig tests that current branch is logged in build config
+func TestBranchLoggedInBuildConfig(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create a .git directory to simulate a git repo
+	gitDir := filepath.Join(tmpDir, ".git")
+	if err := os.MkdirAll(gitDir, 0755); err != nil {
+		t.Fatalf("Failed to create .git directory: %v", err)
+	}
+
+	var buf bytes.Buffer
+	logger := NewLogger(&buf, "", false)
+	deployer := NewDeployer(logger)
+
+	project := &ProjectConfig{
+		Name:           "TestProject",
+		WebhookPath:    "/hooks/test",
+		GitRepo:        "https://github.com/example/repo.git",
+		LocalPath:      tmpDir,
+		GitBranch:      "develop",
+		GitUpdate:      false,
+		ExecutePath:    tmpDir,
+		ExecuteCommand: "echo test",
+	}
+
+	deployer.Deploy(context.Background(), project, "WEBHOOK")
+
+	logOutput := buf.String()
+
+	// Should see branch in build config
+	if !strings.Contains(logOutput, "git_branch=develop") {
+		t.Errorf("Expected build config to contain 'git_branch=develop', got: %s", logOutput)
+	}
+}
+
+// TestDeployWithCloneAndBranchCheckout tests that branch is verified after git clone
+func TestDeployWithCloneAndBranchCheckout(t *testing.T) {
+	// Create a source repository
+	sourceDir := t.TempDir()
+	
+	// Initialize a git repo
+	cmd := exec.Command("git", "init")
+	cmd.Dir = sourceDir
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("Failed to init git repo: %v", err)
+	}
+
+	cmd = exec.Command("git", "config", "user.email", "test@example.com")
+	cmd.Dir = sourceDir
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("Failed to set git user email: %v", err)
+	}
+
+	cmd = exec.Command("git", "config", "user.name", "Test User")
+	cmd.Dir = sourceDir
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("Failed to set git user name: %v", err)
+	}
+
+	// Create initial commit on master/main
+	testFile := filepath.Join(sourceDir, "test.txt")
+	if err := os.WriteFile(testFile, []byte("test"), 0644); err != nil {
+		t.Fatalf("Failed to create test file: %v", err)
+	}
+
+	cmd = exec.Command("git", "add", "test.txt")
+	cmd.Dir = sourceDir
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("Failed to git add: %v", err)
+	}
+
+	cmd = exec.Command("git", "commit", "-m", "Initial commit")
+	cmd.Dir = sourceDir
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("Failed to git commit: %v", err)
+	}
+
+	// Get the initial branch name
+	ctx := context.Background()
+	initialBranch, err := getCurrentBranch(ctx, sourceDir)
+	if err != nil {
+		t.Fatalf("Failed to get initial branch: %v", err)
+	}
+
+	// Create a different branch
+	cmd = exec.Command("git", "checkout", "-b", "develop")
+	cmd.Dir = sourceDir
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("Failed to create develop branch: %v", err)
+	}
+
+	// Add a commit to develop
+	developFile := filepath.Join(sourceDir, "develop.txt")
+	if err := os.WriteFile(developFile, []byte("develop"), 0644); err != nil {
+		t.Fatalf("Failed to create develop file: %v", err)
+	}
+
+	cmd = exec.Command("git", "add", "develop.txt")
+	cmd.Dir = sourceDir
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("Failed to git add develop: %v", err)
+	}
+
+	cmd = exec.Command("git", "commit", "-m", "Add develop file")
+	cmd.Dir = sourceDir
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("Failed to git commit develop: %v", err)
+	}
+
+	// Switch back to initial branch as the default
+	cmd = exec.Command("git", "checkout", initialBranch)
+	cmd.Dir = sourceDir
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("Failed to checkout initial branch: %v", err)
+	}
+
+	// Now test SDeploy cloning and ensuring correct branch
+	cloneDir := t.TempDir()
+	
+	var buf bytes.Buffer
+	logger := NewLogger(&buf, "", false)
+	deployer := NewDeployer(logger)
+
+	// Configure to clone to 'develop' branch (different from default)
+	project := &ProjectConfig{
+		Name:           "TestProject",
+		WebhookPath:    "/hooks/test",
+		GitRepo:        fmt.Sprintf("file://%s", sourceDir),
+		LocalPath:      filepath.Join(cloneDir, "repo"),
+		GitBranch:      "develop",
+		GitUpdate:      false,
+		ExecutePath:    filepath.Join(cloneDir, "repo"),
+		ExecuteCommand: "echo test",
+	}
+
+	result := deployer.Deploy(ctx, project, "WEBHOOK")
+
+	if !result.Success {
+		t.Fatalf("Expected deployment to succeed, got error: %s\nLogs:\n%s", result.Error, buf.String())
+	}
+
+	logOutput := buf.String()
+
+	// Should see messages about branch verification after clone
+	if !strings.Contains(logOutput, "Cloned repository") {
+		t.Errorf("Expected log to contain 'Cloned repository', got: %s", logOutput)
+	}
+	
+	if !strings.Contains(logOutput, "configured branch: develop") {
+		t.Errorf("Expected log to show configured branch, got: %s", logOutput)
+	}
+
+	// Verify we're on the correct branch
+	finalBranch, err := getCurrentBranch(ctx, project.LocalPath)
+	if err != nil {
+		t.Fatalf("Failed to get final branch: %v", err)
+	}
+
+	if finalBranch != "develop" {
+		t.Errorf("Expected to be on 'develop' branch after clone, but on '%s'", finalBranch)
+	}
+
+	// Verify develop.txt exists (from develop branch)
+	developFilePath := filepath.Join(project.LocalPath, "develop.txt")
+	if _, err := os.Stat(developFilePath); err != nil {
+		t.Errorf("Expected develop.txt to exist on develop branch, but got error: %v", err)
 	}
 }
