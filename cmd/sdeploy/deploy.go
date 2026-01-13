@@ -281,7 +281,8 @@ func isGitRepo(path string) bool {
 
 // getCurrentBranch returns the current git branch for a repository
 func getCurrentBranch(ctx context.Context, repoPath string) (string, error) {
-	cmd := buildCommand(ctx, "git rev-parse --abbrev-ref HEAD")
+	// Use exec.Command directly with separate arguments for consistency and security
+	cmd := exec.CommandContext(ctx, "git", "rev-parse", "--abbrev-ref", "HEAD")
 	cmd.Dir = repoPath
 
 	output, err := cmd.CombinedOutput()
@@ -299,7 +300,8 @@ func isValidGitRepo(ctx context.Context, repoPath string) bool {
 		return false
 	}
 	// Use a lighter git command to verify repository validity
-	cmd := buildCommand(ctx, "git rev-parse --git-dir")
+	// Use exec.Command directly with separate arguments for consistency and security
+	cmd := exec.CommandContext(ctx, "git", "rev-parse", "--git-dir")
 	cmd.Dir = repoPath
 	err := cmd.Run()
 	return err == nil
