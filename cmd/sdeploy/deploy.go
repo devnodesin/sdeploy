@@ -123,11 +123,25 @@ func (d *Deployer) Deploy(ctx context.Context, project *ProjectConfig, triggerSo
 	}
 
 	// Git operations (if git_repo is configured)
+	hasChanges := true // Default to true for non-git projects
 	if project.GitRepo != "" {
-		if err := d.handleGitOperations(ctx, project); err != nil {
+		var err error
+		hasChanges, err = d.handleGitOperations(ctx, project)
+		if err != nil {
 			result.Error = err.Error()
 			result.EndTime = time.Now()
 			d.sendNotification(project, &result, triggerSource)
+			return result
+		}
+		
+		// If no changes detected, skip build
+		if !hasChanges {
+			result.Skipped = true
+			result.EndTime = time.Now()
+			if d.logger != nil {
+				d.logger.Infof(project.Name, "Build ignored: no changes in the configured branch")
+			}
+			// Per requirements: no notification should be sent for skipped builds due to no changes
 			return result
 		}
 	} else {
@@ -198,14 +212,15 @@ func (d *Deployer) logBuildConfig(project *ProjectConfig) {
 }
 
 // handleGitOperations handles git clone/pull based on configuration
-func (d *Deployer) handleGitOperations(ctx context.Context, project *ProjectConfig) error {
+// Returns true if there were changes, false if no changes detected
+func (d *Deployer) handleGitOperations(ctx context.Context, project *ProjectConfig) (bool, error) {
 	// Validate SSH key if configured
 	if project.GitSSHKeyPath != "" {
 		if err := validateSSHKeyPath(project.GitSSHKeyPath); err != nil {
 			if d.logger != nil {
 				d.logger.Errorf(project.Name, "SSH key validation failed: %v", err)
 			}
-			return fmt.Errorf("SSH key validation failed: %v", err)
+			return false, fmt.Errorf("SSH key validation failed: %v", err)
 		}
 		if d.logger != nil {
 			d.logger.Infof(project.Name, "Using SSH key for git operations")
@@ -219,7 +234,7 @@ func (d *Deployer) handleGitOperations(ctx context.Context, project *ProjectConf
 			if d.logger != nil {
 				d.logger.Errorf(project.Name, "Git clone failed: %v", err)
 			}
-			return fmt.Errorf("git clone failed: %v", err)
+			return false, fmt.Errorf("git clone failed: %v", err)
 		}
 		if d.logger != nil {
 			d.logger.Infof(project.Name, "Cloned repository to %s", project.LocalPath)
@@ -231,8 +246,10 @@ func (d *Deployer) handleGitOperations(ctx context.Context, project *ProjectConf
 			if d.logger != nil {
 				d.logger.Errorf(project.Name, "Failed to checkout configured branch after clone: %v", err)
 			}
-			return fmt.Errorf("failed to checkout configured branch after clone: %v", err)
+			return false, fmt.Errorf("failed to checkout configured branch after clone: %v", err)
 		}
+		// Clone always brings new code, so consider it as having changes
+		return true, nil
 	} else {
 		if d.logger != nil {
 			d.logger.Infof(project.Name, "Repository already cloned at %s", project.LocalPath)
@@ -243,27 +260,59 @@ func (d *Deployer) handleGitOperations(ctx context.Context, project *ProjectConf
 			if d.logger != nil {
 				d.logger.Errorf(project.Name, "Failed to checkout configured branch: %v", err)
 			}
-			return fmt.Errorf("failed to checkout configured branch: %v", err)
+			return false, fmt.Errorf("failed to checkout configured branch: %v", err)
 		}
 		
 		// Check if we should do git pull
 		if project.GitUpdate {
+			// Get current commit SHA before pull
+			beforeSHA, err := getCurrentCommitSHA(ctx, project.LocalPath)
+			if err != nil {
+				if d.logger != nil {
+					d.logger.Warnf(project.Name, "Failed to get commit SHA before pull: %v", err)
+				}
+				// Continue with pull even if we can't get SHA
+				beforeSHA = ""
+			}
+			
 			if err := d.gitPull(ctx, project); err != nil {
 				if d.logger != nil {
 					d.logger.Errorf(project.Name, "Git pull failed: %v", err)
 				}
-				return fmt.Errorf("git pull failed: %v", err)
+				return false, fmt.Errorf("git pull failed: %v", err)
 			}
 			if d.logger != nil {
 				d.logger.Infof(project.Name, "Executed git pull")
 			}
+			
+			// Get current commit SHA after pull
+			afterSHA, err := getCurrentCommitSHA(ctx, project.LocalPath)
+			if err != nil {
+				if d.logger != nil {
+					d.logger.Warnf(project.Name, "Failed to get commit SHA after pull: %v", err)
+				}
+				// If we can't determine, assume there were changes to be safe
+				return true, nil
+			}
+			
+			// Check if there were changes
+			hasChanges := beforeSHA != afterSHA
+			if d.logger != nil {
+				if hasChanges {
+					d.logger.Infof(project.Name, "Changes detected: %s -> %s", beforeSHA[:8], afterSHA[:8])
+				} else {
+					d.logger.Infof(project.Name, "No changes detected (commit: %s)", afterSHA[:8])
+				}
+			}
+			return hasChanges, nil
 		} else {
 			if d.logger != nil {
 				d.logger.Infof(project.Name, "git_update is false, skipping git pull")
 			}
+			// If not pulling, assume there are changes (or at least proceed with build)
+			return true, nil
 		}
 	}
-	return nil
 }
 
 // isGitRepo checks if the given path is a git repository
@@ -292,6 +341,21 @@ func getCurrentBranch(ctx context.Context, repoPath string) (string, error) {
 
 	branch := strings.TrimSpace(string(output))
 	return branch, nil
+}
+
+// getCurrentCommitSHA returns the current commit SHA for a repository
+func getCurrentCommitSHA(ctx context.Context, repoPath string) (string, error) {
+	// Use exec.Command directly with separate arguments for consistency and security
+	cmd := exec.CommandContext(ctx, "git", "rev-parse", "HEAD")
+	cmd.Dir = repoPath
+
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return "", fmt.Errorf("%v: %s", err, string(output))
+	}
+
+	sha := strings.TrimSpace(string(output))
+	return sha, nil
 }
 
 // isValidGitRepo checks if the path is a valid git repository by running a git command
