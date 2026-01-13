@@ -2030,3 +2030,42 @@ func TestDeployCloneAlwaysHasChanges(t *testing.T) {
 		t.Errorf("Expected log to contain 'Cloned repository', got: %s", logOutput)
 	}
 }
+
+// TestTruncateSHA tests the truncateSHA helper function
+func TestTruncateSHA(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "full SHA",
+			input:    "1234567890abcdef1234567890abcdef12345678",
+			expected: "12345678",
+		},
+		{
+			name:     "exactly 8 characters",
+			input:    "12345678",
+			expected: "12345678",
+		},
+		{
+			name:     "less than 8 characters",
+			input:    "123",
+			expected: "123",
+		},
+		{
+			name:     "empty string",
+			input:    "",
+			expected: "",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			result := truncateSHA(tc.input)
+			if result != tc.expected {
+				t.Errorf("truncateSHA(%q) = %q, expected %q", tc.input, result, tc.expected)
+			}
+		})
+	}
+}

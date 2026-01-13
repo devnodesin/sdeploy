@@ -299,9 +299,9 @@ func (d *Deployer) handleGitOperations(ctx context.Context, project *ProjectConf
 			hasChanges := beforeSHA != afterSHA
 			if d.logger != nil {
 				if hasChanges {
-					d.logger.Infof(project.Name, "Changes detected: %s -> %s", beforeSHA[:8], afterSHA[:8])
+					d.logger.Infof(project.Name, "Changes detected: %s -> %s", truncateSHA(beforeSHA), truncateSHA(afterSHA))
 				} else {
-					d.logger.Infof(project.Name, "No changes detected (commit: %s)", afterSHA[:8])
+					d.logger.Infof(project.Name, "No changes detected (commit: %s)", truncateSHA(afterSHA))
 				}
 			}
 			return hasChanges, nil
@@ -356,6 +356,14 @@ func getCurrentCommitSHA(ctx context.Context, repoPath string) (string, error) {
 
 	sha := strings.TrimSpace(string(output))
 	return sha, nil
+}
+
+// truncateSHA safely truncates a commit SHA to 8 characters for logging
+func truncateSHA(sha string) string {
+	if len(sha) < 8 {
+		return sha
+	}
+	return sha[:8]
 }
 
 // isValidGitRepo checks if the path is a valid git repository by running a git command
