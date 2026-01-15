@@ -107,9 +107,18 @@ func (h *WebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Extract branch from payload
 	branch := extractBranchFromPayload(body)
 
+	// Determine enhanced trigger source for WEBHOOK triggers
+	var enhancedTriggerSource string
+	if triggerSource == TriggerWebhook {
+		source := determineTriggerSource(body)
+		enhancedTriggerSource = string(triggerSource) + " (" + source + ")"
+	} else {
+		enhancedTriggerSource = string(triggerSource)
+	}
+
 	// Log the webhook receipt
 	if h.logger != nil {
-		h.logger.Infof(project.Name, "Received %s trigger for branch: %s", triggerSource, branch)
+		h.logger.Infof(project.Name, "Received %s trigger for branch: %s", enhancedTriggerSource, branch)
 		//print the full payload
 		h.logger.Infof(project.Name, "Payload: %s", string(body))
 	}
@@ -129,7 +138,7 @@ func (h *WebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if h.deployer != nil {
 			// Use a background context since HTTP request context is canceled after response
 			// Deploy already logs start/completion/failure, so no extra logging needed here
-			h.deployer.Deploy(context.Background(), project, string(triggerSource))
+			h.deployer.Deploy(context.Background(), project, enhancedTriggerSource)
 		}
 	}()
 
@@ -195,4 +204,35 @@ func extractBranchFromPayload(payload []byte) string {
 	}
 
 	return ""
+}
+
+// determineTriggerSource extracts and determines the trigger source from webhook payload
+// Logic:
+// 1. Use triggered_by if present and not empty
+// 2. Else, if sender.url starts with "https://api.github.com/users/", return "Github"
+// 3. Else, return "unknown"
+func determineTriggerSource(payload []byte) string {
+	var data struct {
+		TriggeredBy string `json:"triggered_by"`
+		Sender      struct {
+			URL string `json:"url"`
+		} `json:"sender"`
+	}
+
+	if err := json.Unmarshal(payload, &data); err != nil {
+		return "unknown"
+	}
+
+	// Priority 1: Use triggered_by if present and not empty
+	if data.TriggeredBy != "" {
+		return data.TriggeredBy
+	}
+
+	// Priority 2: Check sender.url for GitHub user
+	if strings.HasPrefix(data.Sender.URL, "https://api.github.com/users/") {
+		return "Github"
+	}
+
+	// Default: unknown
+	return "unknown"
 }

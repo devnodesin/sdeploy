@@ -223,3 +223,42 @@ func TestEmailErrorHandling(t *testing.T) {
 	_ = notifier.SendNotification(project, result, "WEBHOOK")
 	_ = logBuf
 }
+
+// TestEmailEnhancedTriggerSource tests that email includes enhanced trigger source
+func TestEmailEnhancedTriggerSource(t *testing.T) {
+	result := &DeployResult{
+		Success:   true,
+		Output:    "Deployment completed successfully",
+		StartTime: time.Date(2024, 1, 15, 10, 30, 0, 0, time.UTC),
+		EndTime:   time.Date(2024, 1, 15, 10, 30, 45, 0, time.UTC),
+	}
+
+	project := &ProjectConfig{
+		Name:      "Frontend",
+		GitBranch: "main",
+	}
+
+	// Test with enhanced trigger source format
+	email := composeDeploymentEmail(project, result, "WEBHOOK (Github)")
+
+	if !strings.Contains(email.Body, "WEBHOOK (Github)") {
+		t.Errorf("Expected email body to contain enhanced trigger source 'WEBHOOK (Github)', got: %s", email.Body)
+	}
+
+	// Test with custom triggered_by
+	email2 := composeDeploymentEmail(project, result, "WEBHOOK (Jenkins)")
+
+	if !strings.Contains(email2.Body, "WEBHOOK (Jenkins)") {
+		t.Errorf("Expected email body to contain 'WEBHOOK (Jenkins)', got: %s", email2.Body)
+	}
+
+	// Test with INTERNAL trigger (should not have enhancements)
+	email3 := composeDeploymentEmail(project, result, "INTERNAL")
+
+	if !strings.Contains(email3.Body, "INTERNAL") {
+		t.Errorf("Expected email body to contain 'INTERNAL', got: %s", email3.Body)
+	}
+	if strings.Contains(email3.Body, "WEBHOOK") {
+		t.Errorf("INTERNAL trigger should not contain WEBHOOK, got: %s", email3.Body)
+	}
+}

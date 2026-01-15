@@ -349,3 +349,114 @@ func TestValidateHMAC(t *testing.T) {
 		t.Error("Expected malformed signature to return false")
 	}
 }
+
+// TestDetermineTriggerSource tests the logic for determining trigger source from payload
+func TestDetermineTriggerSource(t *testing.T) {
+	tests := []struct {
+		name     string
+		payload  string
+		expected string
+	}{
+		{
+			name:     "triggered_by present",
+			payload:  `{"ref":"refs/heads/main","triggered_by":"CI/CD Pipeline"}`,
+			expected: "CI/CD Pipeline",
+		},
+		{
+			name:     "sender.url is GitHub user",
+			payload:  `{"ref":"refs/heads/main","sender":{"url":"https://api.github.com/users/testuser"}}`,
+			expected: "Github",
+		},
+		{
+			name:     "sender.url is GitHub repos (not user)",
+			payload:  `{"ref":"refs/heads/main","sender":{"url":"https://api.github.com/repos/test/repo"}}`,
+			expected: "unknown",
+		},
+		{
+			name:     "no triggered_by or sender",
+			payload:  `{"ref":"refs/heads/main"}`,
+			expected: "unknown",
+		},
+		{
+			name:     "empty triggered_by falls back to sender",
+			payload:  `{"ref":"refs/heads/main","triggered_by":"","sender":{"url":"https://api.github.com/users/john"}}`,
+			expected: "Github",
+		},
+		{
+			name:     "both triggered_by and sender present - triggered_by takes precedence",
+			payload:  `{"ref":"refs/heads/main","triggered_by":"Custom Source","sender":{"url":"https://api.github.com/users/jane"}}`,
+			expected: "Custom Source",
+		},
+		{
+			name:     "invalid JSON",
+			payload:  `{invalid}`,
+			expected: "unknown",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			result := determineTriggerSource([]byte(tc.payload))
+			if result != tc.expected {
+				t.Errorf("Expected %s, got %s", tc.expected, result)
+			}
+		})
+	}
+}
+
+// TestWebhookEnhancedTriggerSource tests that webhook triggers include enhanced source info
+func TestWebhookEnhancedTriggerSource(t *testing.T) {
+	cfg := &Config{
+		Projects: []ProjectConfig{
+			{
+				Name:           "TestProject",
+				WebhookPath:    "/hooks/test",
+				WebhookSecret:  "mysecret",
+				GitBranch:      "main",
+				ExecuteCommand: "echo test",
+			},
+		},
+	}
+
+	var buf bytes.Buffer
+	logger := NewLogger(&buf, "", false)
+	handler := NewWebhookHandler(cfg, logger)
+
+	// Test with triggered_by in payload
+	payload := `{"ref":"refs/heads/main","triggered_by":"Jenkins"}`
+	mac := hmac.New(sha256.New, []byte("mysecret"))
+	mac.Write([]byte(payload))
+	signature := "sha256=" + hex.EncodeToString(mac.Sum(nil))
+
+	req := httptest.NewRequest("POST", "/hooks/test", strings.NewReader(payload))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Hub-Signature-256", signature)
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	// Check that log contains "WEBHOOK (Jenkins)"
+	logOutput := buf.String()
+	if !strings.Contains(logOutput, "WEBHOOK (Jenkins)") {
+		t.Errorf("Expected log to contain 'WEBHOOK (Jenkins)', got: %s", logOutput)
+	}
+
+	// Test with GitHub sender
+	buf.Reset()
+	payload2 := `{"ref":"refs/heads/main","sender":{"url":"https://api.github.com/users/testuser"}}`
+	mac2 := hmac.New(sha256.New, []byte("mysecret"))
+	mac2.Write([]byte(payload2))
+	signature2 := "sha256=" + hex.EncodeToString(mac2.Sum(nil))
+
+	req2 := httptest.NewRequest("POST", "/hooks/test", strings.NewReader(payload2))
+	req2.Header.Set("Content-Type", "application/json")
+	req2.Header.Set("X-Hub-Signature-256", signature2)
+	rr2 := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr2, req2)
+
+	logOutput2 := buf.String()
+	if !strings.Contains(logOutput2, "WEBHOOK (Github)") {
+		t.Errorf("Expected log to contain 'WEBHOOK (Github)', got: %s", logOutput2)
+	}
+}
