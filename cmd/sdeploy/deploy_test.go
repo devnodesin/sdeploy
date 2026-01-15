@@ -1954,3 +1954,84 @@ func TestTruncateSHA(t *testing.T) {
 		})
 	}
 }
+
+// TestShouldSkipBuildOnNoChanges tests the logic for skipping builds based on trigger source
+func TestShouldSkipBuildOnNoChanges(t *testing.T) {
+	tests := []struct {
+		name          string
+		triggerSource string
+		shouldSkip    bool
+		description   string
+	}{
+		{
+			name:          "GitHub webhook should skip",
+			triggerSource: "WEBHOOK (Github)",
+			shouldSkip:    true,
+			description:   "GitHub push webhooks should skip when no changes",
+		},
+		{
+			name:          "Unknown webhook should skip",
+			triggerSource: "WEBHOOK (unknown)",
+			shouldSkip:    true,
+			description:   "Unknown webhook sources should skip for safety",
+		},
+		{
+			name:          "Plain WEBHOOK should skip",
+			triggerSource: "WEBHOOK",
+			shouldSkip:    true,
+			description:   "WEBHOOK without source should skip for safety",
+		},
+		{
+			name:          "Internal trigger should not skip",
+			triggerSource: "INTERNAL",
+			shouldSkip:    false,
+			description:   "Internal triggers should always build",
+		},
+		{
+			name:          "Jenkins webhook should not skip",
+			triggerSource: "WEBHOOK (Jenkins)",
+			shouldSkip:    false,
+			description:   "Non-GitHub webhooks should always build",
+		},
+		{
+			name:          "GitLab webhook should not skip",
+			triggerSource: "WEBHOOK (GitLab)",
+			shouldSkip:    false,
+			description:   "GitLab webhooks should always build",
+		},
+		{
+			name:          "CI/CD webhook should not skip",
+			triggerSource: "WEBHOOK (CI/CD Pipeline)",
+			shouldSkip:    false,
+			description:   "CI/CD webhooks should always build",
+		},
+		{
+			name:          "Custom webhook should not skip",
+			triggerSource: "WEBHOOK (Custom Source)",
+			shouldSkip:    false,
+			description:   "Custom webhook sources should always build",
+		},
+		{
+			name:          "Unknown non-webhook should not skip",
+			triggerSource: "CUSTOM_TRIGGER",
+			shouldSkip:    false,
+			description:   "Unknown non-webhook triggers should always build",
+		},
+		{
+			name:          "Empty string should not skip",
+			triggerSource: "",
+			shouldSkip:    false,
+			description:   "Empty trigger source should not skip",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			result := shouldSkipBuildOnNoChanges(tc.triggerSource)
+			if result != tc.shouldSkip {
+				t.Errorf("shouldSkipBuildOnNoChanges(%q) = %v, expected %v\n%s",
+					tc.triggerSource, result, tc.shouldSkip, tc.description)
+			}
+		})
+	}
+}
