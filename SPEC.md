@@ -32,11 +32,11 @@ All hardcoded fallback defaults must be centralized in [`cmd/sdeploy/config.go`]
 
 > **Source:** See `Defaults` struct in [`cmd/sdeploy/config.go`](cmd/sdeploy/config.go)
 
-| Field       | Default Value            | Description                    |
-|-------------|--------------------------|--------------------------------|
-| `Port`      | `8080`                   | HTTP listener port             |
-| `LogPath`   | `/var/log/sdeploy.log`   | Log file path in daemon mode   |
-| `GitBranch` | `"main"`                 | Default git branch             |
+| Field       | Default Value          | Description                          |
+|-------------|------------------------|--------------------------------------|
+| `Port`      | `8080`                 | HTTP listener port                   |
+| `LogPath`   | `/var/log/sdeploy`     | Base directory for log files         |
+| `GitBranch` | `"main"`               | Default git branch                   |
 
 Config file search order is defined in `ConfigSearchPaths`:
 1. `/etc/sdeploy.conf`
@@ -132,12 +132,19 @@ SDeploy uses YAML format for configuration.
 
 ### Global Configuration
 
-| Key            | Type   | Default                  | Description                          |
-|----------------|--------|--------------------------|--------------------------------------|
-| `listen_port`  | int    | `8080`                   | HTTP port for webhook listener       |
-| `log_filepath` | string | `/var/log/sdeploy.log`   | Log file path (daemon mode)          |
-| `email_config` | object | —                        | SMTP configuration (see below)       |
-| `projects`     | array  | —                        | List of project configurations       |
+| Key            | Type   | Default              | Description                                    |
+|----------------|--------|----------------------|------------------------------------------------|
+| `listen_port`  | int    | `8080`               | HTTP port for webhook listener                 |
+| `log_path`     | string | `/var/log/sdeploy`   | Base directory for log files (daemon mode)     |
+| `email_config` | object | —                    | SMTP configuration (see below)                 |
+| `projects`     | array  | —                    | List of project configurations                 |
+
+**Logging Details:**
+- **Service logs**: Written to `{log_path}/main.log` (or stderr in console mode)
+- **Build logs**: Written to `{log_path}/{project_name}-{yyyy-mm-dd}-{HHMM}-{success|fail}.log`
+- All logs are timestamped and include severity level (INFO, WARN, ERROR)
+- Build logs are created per deployment and include only that build's output
+- In console mode, service logs go to stderr, but build logs still go to files
 
 ### Email Configuration (`email_config`)
 
