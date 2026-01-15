@@ -101,7 +101,7 @@ func NewLogger(writer io.Writer, logPath string, daemonMode bool) *Logger {
 
 // NewBuildLogger creates a logger for a specific project build
 // Build logs are always written to a file, even in console mode
-// Filename format: {project_name}-{yyyy-mm-dd}-{MinSec}-{status}.log
+// Filename format: {project_name}-{yyyy-mm-dd}-{HHMM}-{status}.log
 // Status is set when Close is called
 func (l *Logger) NewBuildLogger(projectName string) *BuildLogger {
 	bl := &BuildLogger{

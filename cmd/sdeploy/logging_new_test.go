@@ -62,7 +62,7 @@ func TestBuildLoggerFileNaming(t *testing.T) {
 		t.Fatal("Expected build log file not found")
 	}
 
-	// Verify filename format: {project_name}-{yyyy-mm-dd}-{MinSec}-{success|fail}.log
+	// Verify filename format: {project_name}-{yyyy-mm-dd}-{HHMM}-{success|fail}.log
 	parts := strings.Split(buildLogFile, "-")
 	if len(parts) < 5 {
 		t.Errorf("Expected filename format: project-yyyy-mm-dd-MinSec-status.log, got: %s", buildLogFile)
