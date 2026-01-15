@@ -56,6 +56,12 @@ func NewLogger(writer io.Writer, logPath string, daemonMode bool) *Logger {
 	// If writer is provided, use it directly (for testing)
 	if writer != nil {
 		l.writer = writer
+		// Still set logPath for build loggers
+		if logPath != "" {
+			l.logPath = logPath
+		} else {
+			l.logPath = Defaults.LogPath
+		}
 		return l
 	}
 
@@ -177,6 +183,16 @@ func (bl *BuildLogger) Close(success bool) {
 			fmt.Fprintf(os.Stderr, "[SDeploy] Failed to rename build log file: %v\n", err)
 		}
 	}
+}
+
+// GetFinalPath returns the final path of the build log file after Close is called
+func (bl *BuildLogger) GetFinalPath() string {
+	if bl == nil {
+		return ""
+	}
+	bl.mu.Lock()
+	defer bl.mu.Unlock()
+	return bl.finalPath
 }
 
 // log writes a log message to the build logger

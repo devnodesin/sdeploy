@@ -104,6 +104,24 @@ func (d *Deployer) Deploy(ctx context.Context, project *ProjectConfig, triggerSo
 		// Close the build logger with the result status
 		if buildLogger != nil {
 			buildLogger.Close(result.Success && !result.Skipped)
+			
+			// Log final status to main.log after build logger is closed
+			if d.logger != nil && !result.Skipped {
+				finalLogPath := buildLogger.GetFinalPath()
+				if result.Success {
+					if finalLogPath != "" {
+						d.logger.Infof(project.Name, "Deployment successful (Refer build log file %s)", finalLogPath)
+					} else {
+						d.logger.Infof(project.Name, "Deployment successful")
+					}
+				} else {
+					if finalLogPath != "" {
+						d.logger.Infof(project.Name, "Deployment error (Refer build log file %s)", finalLogPath)
+					} else {
+						d.logger.Infof(project.Name, "Deployment error")
+					}
+				}
+			}
 		}
 		lock.Unlock()
 		// Track active builds and process pending reload when all builds complete

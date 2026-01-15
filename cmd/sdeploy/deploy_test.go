@@ -2151,3 +2151,94 @@ func TestDeployNoChangesWithDifferentTriggerSources(t *testing.T) {
 		})
 	}
 }
+
+// TestDeploymentStatusLogging tests that deployment status is logged to main.log
+func TestDeploymentStatusLogging(t *testing.T) {
+	tmpDir := t.TempDir()
+	
+	var buf bytes.Buffer
+	logger := NewLogger(&buf, tmpDir, false)
+	deployer := NewDeployer(logger)
+	
+	project := &ProjectConfig{
+		Name:           "testproject",
+		WebhookPath:    "/hooks/test",
+		ExecuteCommand: "echo success",
+		LocalPath:      tmpDir,
+	}
+	
+	// Test successful deployment
+	result := deployer.Deploy(context.Background(), project, "WEBHOOK (Github)")
+	if !result.Success {
+		t.Errorf("Expected deployment to succeed, got error: %s", result.Error)
+	}
+	
+	// Check that main.log contains success message
+	logOutput := buf.String()
+	if !strings.Contains(logOutput, "Deployment successful") {
+		t.Errorf("Expected log to contain 'Deployment successful', got: %s", logOutput)
+	}
+	// If build log file was created successfully, check for the reference
+	if strings.Contains(logOutput, "Refer build log file") {
+		if strings.Contains(logOutput, tmpDir) {
+			if !strings.Contains(logOutput, "-success.log") {
+				t.Errorf("Expected log to contain '-success.log', got: %s", logOutput)
+			}
+		}
+	}
+	
+	// Test failed deployment
+	buf.Reset()
+	project.ExecuteCommand = "exit 1"
+	result = deployer.Deploy(context.Background(), project, "WEBHOOK (Github)")
+	if result.Success {
+		t.Error("Expected deployment to fail")
+	}
+	
+	logOutput = buf.String()
+	if !strings.Contains(logOutput, "Deployment error") {
+		t.Errorf("Expected log to contain 'Deployment error', got: %s", logOutput)
+	}
+	// If build log file was created successfully, check for the reference
+	if strings.Contains(logOutput, "Refer build log file") {
+		if strings.Contains(logOutput, tmpDir) {
+			if !strings.Contains(logOutput, "-fail.log") {
+				t.Errorf("Expected log to contain '-fail.log', got: %s", logOutput)
+			}
+		}
+	}
+	
+	// Test skipped deployment - should NOT log status
+	buf.Reset()
+	project.ExecuteCommand = "sleep 2"
+	
+	var wg sync.WaitGroup
+	wg.Add(2)
+	
+	// Start first deployment
+	go func() {
+		defer wg.Done()
+		deployer.Deploy(context.Background(), project, "WEBHOOK (Github)")
+	}()
+	
+	// Give first deployment time to acquire lock
+	time.Sleep(100 * time.Millisecond)
+	
+	// Try to start second deployment (should be skipped)
+	go func() {
+		defer wg.Done()
+		result := deployer.Deploy(context.Background(), project, "WEBHOOK (Github)")
+		if !result.Skipped {
+			t.Error("Expected second deployment to be skipped")
+		}
+	}()
+	
+	wg.Wait()
+	
+	logOutput = buf.String()
+	// Count occurrences of "Deployment successful" - should be 1 (only from first deployment)
+	count := strings.Count(logOutput, "Deployment successful")
+	if count != 1 {
+		t.Errorf("Expected 1 'Deployment successful' message, got %d in: %s", count, logOutput)
+	}
+}
