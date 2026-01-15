@@ -2054,17 +2054,27 @@ func TestDeployNoChangesWithDifferentTriggerSources(t *testing.T) {
 	}
 	
 	// Configure git
-	exec.Command("git", "-C", repoPath, "config", "user.email", "test@example.com").Run()
-	exec.Command("git", "-C", repoPath, "config", "user.name", "Test User").Run()
+	if err := exec.Command("git", "-C", repoPath, "config", "user.email", "test@example.com").Run(); err != nil {
+		t.Fatalf("Failed to configure git email: %v", err)
+	}
+	if err := exec.Command("git", "-C", repoPath, "config", "user.name", "Test User").Run(); err != nil {
+		t.Fatalf("Failed to configure git name: %v", err)
+	}
 	
 	// Create initial commit and push
 	testFile := filepath.Join(repoPath, "test.txt")
 	if err := os.WriteFile(testFile, []byte("initial"), 0644); err != nil {
 		t.Fatalf("Failed to create test file: %v", err)
 	}
-	exec.Command("git", "-C", repoPath, "add", ".").Run()
-	exec.Command("git", "-C", repoPath, "commit", "-m", "initial").Run()
-	exec.Command("git", "-C", repoPath, "push", "origin", "master").Run()
+	if err := exec.Command("git", "-C", repoPath, "add", ".").Run(); err != nil {
+		t.Fatalf("Failed to git add: %v", err)
+	}
+	if err := exec.Command("git", "-C", repoPath, "commit", "-m", "initial").Run(); err != nil {
+		t.Fatalf("Failed to git commit: %v", err)
+	}
+	if err := exec.Command("git", "-C", repoPath, "push", "origin", "master").Run(); err != nil {
+		t.Fatalf("Failed to git push: %v", err)
+	}
 	
 	tests := []struct {
 		name          string
