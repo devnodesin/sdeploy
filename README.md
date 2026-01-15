@@ -52,13 +52,16 @@ SDeploy uses YAML format for configuration:
 - **[samples/sdeploy.conf](samples/sdeploy.conf)** — Minimal quick-start example
 - **[samples/sdeploy-full.conf](samples/sdeploy-full.conf)** — Full reference with all fields documented
 
-| Key             | Description                              |
-|-----------------|------------------------------------------|
-| `listen_port`   | HTTP port (default: 8080)                |
-| `email_config`  | SMTP settings for notifications          |
-| `projects`      | Array of project configurations          |
+| Key             | Description                                     |
+|-----------------|-------------------------------------------------|
+| `listen_port`   | HTTP port (default: 8080)                       |
+| `log_path`      | Base directory for log files (default: `/var/log/sdeploy`) |
+| `email_config`  | SMTP settings for notifications                 |
+| `projects`      | Array of project configurations                 |
 
-**Note:** Logs are always written to `/var/log/sdeploy.log`. The `log_filepath` configuration option is deprecated and ignored.
+**Logging:**
+- Service logs: `{log_path}/main.log` (daemon mode) or stderr (console mode)
+- Build logs: `{log_path}/{project}-{date}-{time}-{success|fail}.log` (always to file)
 
 ### Project Config
 

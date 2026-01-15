@@ -45,9 +45,13 @@ func main() {
 	}
 
 	// Initialize logger
-	// Console mode: logs to stderr for interactive use
-	// Daemon mode: logs to file for background service use
-	logger := NewLogger(nil, "", *daemonMode)
+	// Console mode: logs to stderr for interactive use (but build logs still go to files)
+	// Daemon mode: logs to main.log file for background service use
+	logPath := cfg.LogPath
+	if logPath == "" {
+		logPath = Defaults.LogPath
+	}
+	logger := NewLogger(nil, logPath, *daemonMode)
 	defer logger.Close()
 
 	logger.Infof("", "%s %s - Service started", ServiceName, Version)
@@ -131,10 +135,19 @@ func main() {
 func logConfigSummary(logger *Logger, cfg *Config, daemonMode bool) {
 	logger.Info("", "Configuration loaded:")
 	logger.Infof("", "  Listen Port: %d", cfg.ListenPort)
+	
+	logPath := cfg.LogPath
+	if logPath == "" {
+		logPath = Defaults.LogPath
+	}
+	
 	if daemonMode {
-		logger.Infof("", "  Log File: %s", Defaults.LogPath)
+		logger.Infof("", "  Log Directory: %s", logPath)
+		logger.Infof("", "  Service Log: %s/main.log", logPath)
+		logger.Infof("", "  Build Logs: %s/{project}-{date}-{time}-{status}.log", logPath)
 	} else {
-		logger.Info("", "  Log Output: console (stderr)")
+		logger.Info("", "  Service Log: console (stderr)")
+		logger.Infof("", "  Build Logs: %s/{project}-{date}-{time}-{status}.log", logPath)
 	}
 	if IsEmailConfigValid(cfg.EmailConfig) {
 		logger.Info("", "  Email Notifications: enabled")

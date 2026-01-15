@@ -16,7 +16,7 @@ func TestLoadConfigValidFile(t *testing.T) {
 
 	validConfig := `
 listen_port: 8080
-log_filepath: /var/log/sdeploy/daemon.log
+log_path: /var/log/sdeploy
 email_config:
   smtp_host: smtp.sendgrid.net
   smtp_port: 587
@@ -51,8 +51,8 @@ projects:
 		t.Errorf("Expected ListenPort 8080, got %d", cfg.ListenPort)
 	}
 
-	if cfg.LogFilepath != "/var/log/sdeploy/daemon.log" {
-		t.Errorf("Expected LogFilepath '/var/log/sdeploy/daemon.log', got '%s'", cfg.LogFilepath)
+	if cfg.LogPath != "/var/log/sdeploy" {
+		t.Errorf("Expected LogPath '/var/log/sdeploy', got '%s'", cfg.LogPath)
 	}
 
 	if cfg.EmailConfig.SMTPHost != "smtp.sendgrid.net" {

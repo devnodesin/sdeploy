@@ -61,7 +61,7 @@ func buildCommand(ctx context.Context, command string) *exec.Cmd {
 }
 
 // ensureParentDirExists creates parent directories if they don't exist
-func ensureParentDirExists(ctx context.Context, parentDir string, logger *Logger, projectName string) error {
+func ensureParentDirExists(ctx context.Context, parentDir string, logger LogWriter, projectName string) error {
 	// Check if parent directory already exists
 	if info, err := os.Stat(parentDir); err == nil {
 		if info.IsDir() {
