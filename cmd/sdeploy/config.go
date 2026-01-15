@@ -15,7 +15,7 @@ var Defaults = struct {
 	GitBranch string
 }{
 	Port:      8080,
-	LogPath:   "/var/log/sdeploy.log",
+	LogPath:   "/var/log/sdeploy",
 	GitBranch: "main",
 }
 
@@ -53,7 +53,7 @@ type ProjectConfig struct {
 // Config holds the complete SDeploy configuration
 type Config struct {
 	ListenPort  int             `yaml:"listen_port"`
-	LogFilepath string          `yaml:"log_filepath"`
+	LogPath     string          `yaml:"log_path"`
 	EmailConfig *EmailConfig    `yaml:"email_config"`
 	Projects    []ProjectConfig `yaml:"projects"`
 }

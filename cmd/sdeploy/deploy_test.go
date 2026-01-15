@@ -1175,7 +1175,7 @@ func TestEnsureCorrectBranchSameBranch(t *testing.T) {
 	}
 
 	// Should succeed without doing anything
-	err = deployer.ensureCorrectBranch(ctx, project)
+	err = deployer.ensureCorrectBranch(ctx, project, nil)
 	if err != nil {
 		t.Errorf("ensureCorrectBranch failed: %v", err)
 	}
@@ -1275,7 +1275,7 @@ func TestEnsureCorrectBranchDifferentBranch(t *testing.T) {
 	}
 
 	// Should checkout the configured branch
-	err = deployer.ensureCorrectBranch(ctx, project)
+	err = deployer.ensureCorrectBranch(ctx, project, nil)
 	if err != nil {
 		t.Errorf("ensureCorrectBranch failed: %v", err)
 	}
@@ -1350,7 +1350,7 @@ func TestEnsureCorrectBranchNonExistentBranch(t *testing.T) {
 	}
 
 	// Should fail
-	err := deployer.ensureCorrectBranch(ctx, project)
+	err := deployer.ensureCorrectBranch(ctx, project, nil)
 	if err == nil {
 		t.Error("Expected ensureCorrectBranch to fail with non-existent branch")
 	}
@@ -2025,9 +2025,11 @@ func TestDeployCloneAlwaysHasChanges(t *testing.T) {
 
 	logOutput := buf.String()
 
-	// Should see message about cloning
-	if !strings.Contains(logOutput, "Cloned repository") {
-		t.Errorf("Expected log to contain 'Cloned repository', got: %s", logOutput)
+	// Note: With the new logging system, build-specific logs (like "Cloned repository")
+	// go to the build log file, not the service logger buffer
+	// So we just verify the deployment succeeded
+	if result.Success == false || result.Skipped {
+		t.Errorf("Expected successful deployment after clone")
 	}
 }
 

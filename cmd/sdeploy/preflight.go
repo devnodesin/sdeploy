@@ -17,7 +17,7 @@ func getEffectiveExecutePath(localPath, executePath string) string {
 
 // runPreflightChecks performs pre-flight directory checks before deployment.
 // It verifies and creates directories with standard permissions.
-func runPreflightChecks(ctx context.Context, project *ProjectConfig, logger *Logger) error {
+func runPreflightChecks(ctx context.Context, project *ProjectConfig, logger LogWriter) error {
 	if logger != nil {
 		logger.Infof(project.Name, "Running preflight checks")
 	}
@@ -47,7 +47,7 @@ func runPreflightChecks(ctx context.Context, project *ProjectConfig, logger *Log
 }
 
 // ensureDirectoryExists ensures a directory exists with standard permissions (0755).
-func ensureDirectoryExists(dirPath string, logger *Logger, projectName string) error {
+func ensureDirectoryExists(dirPath string, logger LogWriter, projectName string) error {
 	// Check if directory already exists
 	info, err := os.Stat(dirPath)
 	if err == nil {
