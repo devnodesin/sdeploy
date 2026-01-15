@@ -2035,3 +2035,109 @@ func TestShouldSkipBuildOnNoChanges(t *testing.T) {
 		})
 	}
 }
+
+// TestDeployNoChangesWithDifferentTriggerSources tests build skip logic with different trigger sources
+func TestDeployNoChangesWithDifferentTriggerSources(t *testing.T) {
+	// Create a test git repository with a remote
+	tmpDir := t.TempDir()
+	bareRepo := filepath.Join(tmpDir, "bare.git")
+	repoPath := filepath.Join(tmpDir, "repo")
+	
+	// Initialize bare git repo (acts as remote)
+	if err := exec.Command("git", "init", "--bare", bareRepo).Run(); err != nil {
+		t.Skip("Git not available, skipping test")
+	}
+	
+	// Clone from bare repo
+	if err := exec.Command("git", "clone", bareRepo, repoPath).Run(); err != nil {
+		t.Fatalf("Failed to clone repo: %v", err)
+	}
+	
+	// Configure git
+	exec.Command("git", "-C", repoPath, "config", "user.email", "test@example.com").Run()
+	exec.Command("git", "-C", repoPath, "config", "user.name", "Test User").Run()
+	
+	// Create initial commit and push
+	testFile := filepath.Join(repoPath, "test.txt")
+	if err := os.WriteFile(testFile, []byte("initial"), 0644); err != nil {
+		t.Fatalf("Failed to create test file: %v", err)
+	}
+	exec.Command("git", "-C", repoPath, "add", ".").Run()
+	exec.Command("git", "-C", repoPath, "commit", "-m", "initial").Run()
+	exec.Command("git", "-C", repoPath, "push", "origin", "master").Run()
+	
+	tests := []struct {
+		name          string
+		triggerSource string
+		expectSkipped bool
+		description   string
+	}{
+		{
+			name:          "GitHub webhook with no changes should skip",
+			triggerSource: "WEBHOOK (Github)",
+			expectSkipped: true,
+			description:   "GitHub push webhooks should skip when no changes detected",
+		},
+		{
+			name:          "Unknown webhook with no changes should skip",
+			triggerSource: "WEBHOOK (unknown)",
+			expectSkipped: true,
+			description:   "Unknown webhooks should skip for safety",
+		},
+		{
+			name:          "Internal trigger with no changes should NOT skip",
+			triggerSource: "INTERNAL",
+			expectSkipped: false,
+			description:   "Internal triggers should always build",
+		},
+		{
+			name:          "Jenkins webhook with no changes should NOT skip",
+			triggerSource: "WEBHOOK (Jenkins)",
+			expectSkipped: false,
+			description:   "Non-GitHub webhooks should always build",
+		},
+		{
+			name:          "GitLab webhook with no changes should NOT skip",
+			triggerSource: "WEBHOOK (GitLab)",
+			expectSkipped: false,
+			description:   "GitLab webhooks should always build",
+		},
+	}
+	
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			var buf bytes.Buffer
+			logger := NewLogger(&buf, "", false)
+			deployer := NewDeployer(logger)
+			
+			project := &ProjectConfig{
+				Name:           "TestProject",
+				WebhookPath:    "/hooks/test",
+				GitRepo:        bareRepo,
+				GitUpdate:      true,
+				LocalPath:      repoPath,
+				ExecutePath:    repoPath,
+				ExecuteCommand: "echo test",
+				GitBranch:      "master",
+			}
+			
+			result := deployer.Deploy(context.Background(), project, tc.triggerSource)
+			
+			if tc.expectSkipped && !result.Skipped {
+				t.Errorf("Expected deployment to be skipped for %s, but it was not\n%s",
+					tc.triggerSource, tc.description)
+			}
+			
+			if !tc.expectSkipped && result.Skipped {
+				t.Errorf("Expected deployment NOT to be skipped for %s, but it was\n%s",
+					tc.triggerSource, tc.description)
+			}
+			
+			// For non-skipped builds, verify they executed successfully
+			if !tc.expectSkipped && !result.Success {
+				t.Errorf("Expected successful build for %s, but got error: %s\n%s",
+					tc.triggerSource, result.Error, tc.description)
+			}
+		})
+	}
+}
