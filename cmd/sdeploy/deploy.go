@@ -109,9 +109,17 @@ func (d *Deployer) Deploy(ctx context.Context, project *ProjectConfig, triggerSo
 			if d.logger != nil && !result.Skipped {
 				finalLogPath := buildLogger.GetFinalPath()
 				if result.Success {
-					d.logger.Infof(project.Name, "Deployment successful (Refer build log file %s)", finalLogPath)
+					if finalLogPath != "" {
+						d.logger.Infof(project.Name, "Deployment successful (Refer build log file %s)", finalLogPath)
+					} else {
+						d.logger.Infof(project.Name, "Deployment successful")
+					}
 				} else {
-					d.logger.Infof(project.Name, "Deployment error (Refer build log file %s)", finalLogPath)
+					if finalLogPath != "" {
+						d.logger.Infof(project.Name, "Deployment error (Refer build log file %s)", finalLogPath)
+					} else {
+						d.logger.Infof(project.Name, "Deployment error")
+					}
 				}
 			}
 		}
