@@ -460,3 +460,50 @@ func TestWebhookEnhancedTriggerSource(t *testing.T) {
 		t.Errorf("Expected log to contain 'WEBHOOK (Github)', got: %s", logOutput2)
 	}
 }
+
+// TestWebhookInternalTriggerWithTriggeredBy tests INTERNAL trigger with triggered_by in payload
+func TestWebhookInternalTriggerWithTriggeredBy(t *testing.T) {
+	cfg := &Config{
+		Projects: []ProjectConfig{
+			{
+				Name:           "TestProject",
+				WebhookPath:    "/hooks/test",
+				WebhookSecret:  "mysecret",
+				GitBranch:      "main",
+				ExecuteCommand: "echo test",
+			},
+		},
+	}
+
+	var buf bytes.Buffer
+	logger := NewLogger(&buf, "", false)
+	handler := NewWebhookHandler(cfg, logger)
+
+	// Test INTERNAL trigger with triggered_by in payload
+	payload := `{"ref":"refs/heads/main","triggered_by":"woocommerce: user devnodes"}`
+	req := httptest.NewRequest("POST", "/hooks/test?secret=mysecret", strings.NewReader(payload))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	// Check that log contains "WEBHOOK (woocommerce: user devnodes)" instead of "INTERNAL"
+	logOutput := buf.String()
+	if !strings.Contains(logOutput, "WEBHOOK (woocommerce: user devnodes)") {
+		t.Errorf("Expected log to contain 'WEBHOOK (woocommerce: user devnodes)', got: %s", logOutput)
+	}
+
+	// Test INTERNAL trigger without triggered_by - should show as INTERNAL
+	buf.Reset()
+	payload2 := `{"ref":"refs/heads/main"}`
+	req2 := httptest.NewRequest("POST", "/hooks/test?secret=mysecret", strings.NewReader(payload2))
+	req2.Header.Set("Content-Type", "application/json")
+	rr2 := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr2, req2)
+
+	logOutput2 := buf.String()
+	if !strings.Contains(logOutput2, "Received INTERNAL trigger") {
+		t.Errorf("Expected log to contain 'Received INTERNAL trigger', got: %s", logOutput2)
+	}
+}

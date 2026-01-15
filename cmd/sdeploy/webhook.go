@@ -107,11 +107,20 @@ func (h *WebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Extract branch from payload
 	branch := extractBranchFromPayload(body)
 
-	// Determine enhanced trigger source for WEBHOOK triggers
+	// Determine enhanced trigger source
 	var enhancedTriggerSource string
 	if triggerSource == TriggerWebhook {
 		source := determineTriggerSource(body)
 		enhancedTriggerSource = string(triggerSource) + " (" + source + ")"
+	} else if triggerSource == TriggerInternal {
+		// For INTERNAL triggers, check if triggered_by is present in payload
+		source := determineTriggerSource(body)
+		if source != "" && source != "unknown" {
+			// If triggered_by is present, format as WEBHOOK (triggered_by_value)
+			enhancedTriggerSource = "WEBHOOK (" + source + ")"
+		} else {
+			enhancedTriggerSource = string(triggerSource)
+		}
 	} else {
 		enhancedTriggerSource = string(triggerSource)
 	}
