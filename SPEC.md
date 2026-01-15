@@ -293,8 +293,51 @@ SDeploy supports hot reloading of the configuration file without daemon restart.
    - If `git_repo` not set: Skip git operations.
    - If repo not cloned: Clone repository.
    - If `git_update` is true: Run `git pull`.
-10. **Execution:** Run `execute_command` in `execute_path` (with timeout, env vars).
-11. **Cleanup:** Log result, send email notification (if configured), release lock.
+10. **Build Decision Logic:** Determine if build should proceed (see Build Trigger Logic below).
+11. **Execution:** Run `execute_command` in `execute_path` (with timeout, env vars).
+12. **Cleanup:** Log result, send email notification (if configured), release lock.
+
+## 🎯 Build Trigger Logic
+
+SDeploy uses intelligent build triggering based on the webhook source and git changes:
+
+### No Changes Detection
+
+When `git_update` is enabled and `git pull` detects no new commits, SDeploy determines whether to skip the build based on the trigger source:
+
+| Trigger Source | Behavior When No Changes | Rationale |
+|----------------|-------------------------|-----------|
+| `WEBHOOK (Github)` | **Skip build** | GitHub push webhooks indicate explicit code pushes; no changes means nothing to deploy |
+| `WEBHOOK (unknown)` | **Skip build** | Unknown webhook sources are treated conservatively |
+| `WEBHOOK (<other>)` | **Always build** | Non-GitHub webhooks (Jenkins, GitLab, CI/CD) may have external reasons to rebuild |
+| `INTERNAL` | **Always build** | Internal triggers (cron, manual) should always execute regardless of git state |
+
+### Logging
+
+When a build is skipped due to no changes:
+```
+[INFO] No changes detected (commit: d3af528a)
+[INFO] Build ignored: no changes in the configured branch (trigger: WEBHOOK (Github))
+```
+
+When a build proceeds despite no changes:
+```
+[INFO] No changes detected, but proceeding with build (trigger: INTERNAL)
+```
+
+### Use Cases
+
+**Example 1: GitHub Push Webhook**
+- User pushes to GitHub → webhook fires → if no new commits pulled, skip build
+- Prevents redundant builds from multiple webhook deliveries
+
+**Example 2: Scheduled Cron Job**
+- Cron triggers deployment → even if no new commits, run build
+- Useful for periodic rebuilds, cache warming, or environment refreshes
+
+**Example 3: CI/CD Pipeline**
+- Jenkins/GitLab CI triggers webhook → always run build
+- CI/CD systems may rebuild for reasons beyond git changes (dependency updates, cache refresh)
 
 ## 🌐 Integration with Reverse Proxies
 

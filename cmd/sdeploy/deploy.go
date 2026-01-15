@@ -149,15 +149,25 @@ func (d *Deployer) Deploy(ctx context.Context, project *ProjectConfig, triggerSo
 			return result
 		}
 		
-		// If no changes detected, skip build
+		// Check if we should skip build due to no changes
+		// Only skip if:
+		// 1. No changes detected AND
+		// 2. Trigger is from GitHub push webhook OR trigger source is unknown
 		if !hasChanges {
-			result.Skipped = true
-			result.EndTime = time.Now()
-			if buildLogger != nil {
-				buildLogger.Infof(project.Name, "Build ignored: no changes in the configured branch")
+			shouldSkip := shouldSkipBuildOnNoChanges(triggerSource)
+			if shouldSkip {
+				result.Skipped = true
+				result.EndTime = time.Now()
+				if buildLogger != nil {
+					buildLogger.Infof(project.Name, "Build ignored: no changes in the configured branch (trigger: %s)", triggerSource)
+				}
+				// Per requirements: no notification should be sent for skipped builds due to no changes
+				return result
+			} else {
+				if buildLogger != nil {
+					buildLogger.Infof(project.Name, "No changes detected, but proceeding with build (trigger: %s)", triggerSource)
+				}
 			}
-			// Per requirements: no notification should be sent for skipped builds due to no changes
-			return result
 		}
 	} else {
 		if buildLogger != nil {
@@ -627,4 +637,36 @@ func (d *Deployer) sendNotification(project *ProjectConfig, result *DeployResult
 			d.logger.Errorf(project.Name, "Failed to send email notification: %v", err)
 		}
 	}
+}
+
+// shouldSkipBuildOnNoChanges determines if a build should be skipped when no changes are detected
+// Logic:
+// 1. If trigger source is "WEBHOOK (Github)" -> skip build (GitHub push webhook)
+// 2. If trigger source is "WEBHOOK (unknown)" or just "WEBHOOK" -> skip build (unknown source, be safe)
+// 3. For "INTERNAL" or any other trigger -> don't skip (always build)
+// 4. For "WEBHOOK (<other_source>)" -> don't skip (always build for non-GitHub webhooks)
+//
+// Note: This function uses string matching on the enhanced trigger source format created in webhook.go
+// (e.g., "WEBHOOK (Github)", "INTERNAL"). This approach is intentional as it allows the webhook
+// handler to inject custom source names via the payload while maintaining backward compatibility.
+func shouldSkipBuildOnNoChanges(triggerSource string) bool {
+	// Check if it's a WEBHOOK trigger
+	if !strings.HasPrefix(triggerSource, "WEBHOOK") {
+		// Not a webhook (e.g., INTERNAL), so don't skip - always build
+		return false
+	}
+	
+	// It's a WEBHOOK trigger, check the specific source
+	if strings.Contains(triggerSource, "(Github)") {
+		// GitHub push webhook - skip on no changes
+		return true
+	}
+	
+	if strings.Contains(triggerSource, "(unknown)") || triggerSource == "WEBHOOK" {
+		// Unknown source or no source specified - skip for safety
+		return true
+	}
+	
+	// For any other webhook source (e.g., "WEBHOOK (Jenkins)", "WEBHOOK (GitLab)"), don't skip
+	return false
 }
