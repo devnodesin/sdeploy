@@ -1622,3 +1622,450 @@ func TestDeployWithCloneAndBranchCheckout(t *testing.T) {
 		t.Errorf("Expected develop.txt to exist on develop branch, but got error: %v", err)
 	}
 }
+
+// TestGetCurrentCommitSHA tests the getCurrentCommitSHA function
+func TestGetCurrentCommitSHA(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Initialize a git repo
+	cmd := exec.Command("git", "init")
+	cmd.Dir = tmpDir
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("Failed to init git repo: %v", err)
+	}
+
+	cmd = exec.Command("git", "config", "user.email", "test@example.com")
+	cmd.Dir = tmpDir
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("Failed to set git user email: %v", err)
+	}
+
+	cmd = exec.Command("git", "config", "user.name", "Test User")
+	cmd.Dir = tmpDir
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("Failed to set git user name: %v", err)
+	}
+
+	// Create initial commit
+	testFile := filepath.Join(tmpDir, "test.txt")
+	if err := os.WriteFile(testFile, []byte("test"), 0644); err != nil {
+		t.Fatalf("Failed to create test file: %v", err)
+	}
+
+	cmd = exec.Command("git", "add", "test.txt")
+	cmd.Dir = tmpDir
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("Failed to git add: %v", err)
+	}
+
+	cmd = exec.Command("git", "commit", "-m", "Initial commit")
+	cmd.Dir = tmpDir
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("Failed to git commit: %v", err)
+	}
+
+	// Test getting current commit SHA
+	ctx := context.Background()
+	sha, err := getCurrentCommitSHA(ctx, tmpDir)
+	if err != nil {
+		t.Fatalf("getCurrentCommitSHA failed: %v", err)
+	}
+
+	// SHA should be 40 characters (hex)
+	if len(sha) != 40 {
+		t.Errorf("Expected SHA to be 40 characters, got %d: %s", len(sha), sha)
+	}
+}
+
+// TestGetCurrentCommitSHANonRepo tests getCurrentCommitSHA on non-repo directory
+func TestGetCurrentCommitSHANonRepo(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	ctx := context.Background()
+	_, err := getCurrentCommitSHA(ctx, tmpDir)
+	if err == nil {
+		t.Error("Expected getCurrentCommitSHA to fail on non-repo directory")
+	}
+}
+
+// TestDeployNoChangesDetection tests that build is skipped when no changes detected
+func TestDeployNoChangesDetection(t *testing.T) {
+	// Create a source repository (remote)
+	sourceDir := t.TempDir()
+
+	// Initialize a git repo
+	cmd := exec.Command("git", "init", "--bare")
+	cmd.Dir = sourceDir
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("Failed to init bare git repo: %v", err)
+	}
+
+	// Create a working directory to make commits
+	workDir := t.TempDir()
+	cmd = exec.Command("git", "clone", sourceDir, workDir)
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("Failed to clone repo: %v", err)
+	}
+
+	cmd = exec.Command("git", "config", "user.email", "test@example.com")
+	cmd.Dir = workDir
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("Failed to set git user email: %v", err)
+	}
+
+	cmd = exec.Command("git", "config", "user.name", "Test User")
+	cmd.Dir = workDir
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("Failed to set git user name: %v", err)
+	}
+
+	// Create initial commit
+	testFile := filepath.Join(workDir, "test.txt")
+	if err := os.WriteFile(testFile, []byte("test"), 0644); err != nil {
+		t.Fatalf("Failed to create test file: %v", err)
+	}
+
+	cmd = exec.Command("git", "add", "test.txt")
+	cmd.Dir = workDir
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("Failed to git add: %v", err)
+	}
+
+	cmd = exec.Command("git", "commit", "-m", "Initial commit")
+	cmd.Dir = workDir
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("Failed to git commit: %v", err)
+	}
+
+	cmd = exec.Command("git", "push", "origin", "HEAD")
+	cmd.Dir = workDir
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("Failed to git push: %v", err)
+	}
+
+	// Get the actual branch name
+	ctx := context.Background()
+	actualBranch, err := getCurrentBranch(ctx, workDir)
+	if err != nil {
+		t.Fatalf("Failed to get current branch: %v", err)
+	}
+
+	// Clone to another directory (this will be the deployment target)
+	cloneDir := t.TempDir()
+	targetPath := filepath.Join(cloneDir, "repo")
+
+	cmd = exec.Command("git", "clone", "--branch", actualBranch, sourceDir, targetPath)
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("Failed to clone target repo: %v", err)
+	}
+
+	var buf bytes.Buffer
+	logger := NewLogger(&buf, "", false)
+	deployer := NewDeployer(logger)
+
+	project := &ProjectConfig{
+		Name:           "TestProject",
+		WebhookPath:    "/hooks/test",
+		GitRepo:        fmt.Sprintf("file://%s", sourceDir),
+		LocalPath:      targetPath,
+		GitBranch:      actualBranch,
+		GitUpdate:      true, // Enable git pull
+		ExecutePath:    targetPath,
+		ExecuteCommand: "echo 'deployed'",
+	}
+
+	// First deployment - should be skipped since there are no new changes
+	result := deployer.Deploy(ctx, project, "WEBHOOK")
+
+	// Since there are no changes (repo is already up to date),
+	// the build should be skipped
+	if !result.Skipped {
+		t.Errorf("Expected build to be skipped when no changes, got skipped=%v, success=%v, error=%s", result.Skipped, result.Success, result.Error)
+	}
+
+	logOutput := buf.String()
+
+	// Should see message about no changes
+	if !strings.Contains(logOutput, "No changes detected") || !strings.Contains(logOutput, "Build ignored: no changes in the configured branch") {
+		t.Errorf("Expected log to contain message about no changes, got: %s", logOutput)
+	}
+}
+
+// TestDeployWithChangesDetection tests that build runs when changes are detected
+func TestDeployWithChangesDetection(t *testing.T) {
+	// Create a source repository
+	sourceDir := t.TempDir()
+
+	// Initialize a git repo
+	cmd := exec.Command("git", "init")
+	cmd.Dir = sourceDir
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("Failed to init git repo: %v", err)
+	}
+
+	cmd = exec.Command("git", "config", "user.email", "test@example.com")
+	cmd.Dir = sourceDir
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("Failed to set git user email: %v", err)
+	}
+
+	cmd = exec.Command("git", "config", "user.name", "Test User")
+	cmd.Dir = sourceDir
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("Failed to set git user name: %v", err)
+	}
+
+	// Create initial commit
+	testFile := filepath.Join(sourceDir, "test.txt")
+	if err := os.WriteFile(testFile, []byte("test"), 0644); err != nil {
+		t.Fatalf("Failed to create test file: %v", err)
+	}
+
+	cmd = exec.Command("git", "add", "test.txt")
+	cmd.Dir = sourceDir
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("Failed to git add: %v", err)
+	}
+
+	cmd = exec.Command("git", "commit", "-m", "Initial commit")
+	cmd.Dir = sourceDir
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("Failed to git commit: %v", err)
+	}
+
+	// Clone to a target directory
+	cloneDir := t.TempDir()
+	targetPath := filepath.Join(cloneDir, "repo")
+
+	cmd = exec.Command("git", "clone", sourceDir, targetPath)
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("Failed to clone repo: %v", err)
+	}
+
+	// Add a new commit to source repo
+	testFile2 := filepath.Join(sourceDir, "test2.txt")
+	if err := os.WriteFile(testFile2, []byte("test2"), 0644); err != nil {
+		t.Fatalf("Failed to create test2 file: %v", err)
+	}
+
+	cmd = exec.Command("git", "add", "test2.txt")
+	cmd.Dir = sourceDir
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("Failed to git add test2: %v", err)
+	}
+
+	cmd = exec.Command("git", "commit", "-m", "Add test2")
+	cmd.Dir = sourceDir
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("Failed to git commit test2: %v", err)
+	}
+
+	var buf bytes.Buffer
+	logger := NewLogger(&buf, "", false)
+	deployer := NewDeployer(logger)
+
+	// Get current branch name
+	ctx := context.Background()
+	branch, err := getCurrentBranch(ctx, sourceDir)
+	if err != nil {
+		t.Fatalf("Failed to get branch: %v", err)
+	}
+
+	project := &ProjectConfig{
+		Name:           "TestProject",
+		WebhookPath:    "/hooks/test",
+		GitRepo:        fmt.Sprintf("file://%s", sourceDir),
+		LocalPath:      targetPath,
+		GitBranch:      branch,
+		GitUpdate:      true, // Enable git pull
+		ExecutePath:    targetPath,
+		ExecuteCommand: "echo 'deployed'",
+	}
+
+	// Deploy - should detect changes and run build
+	result := deployer.Deploy(ctx, project, "WEBHOOK")
+
+	if result.Skipped {
+		t.Errorf("Expected build to run when changes detected, but it was skipped")
+	}
+
+	if !result.Success {
+		t.Errorf("Expected deployment to succeed, got error: %s", result.Error)
+	}
+
+	logOutput := buf.String()
+
+	// Should see message about changes detected
+	if !strings.Contains(logOutput, "Changes detected") {
+		t.Errorf("Expected log to contain 'Changes detected', got: %s", logOutput)
+	}
+}
+
+// TestDeployNoGitUpdateNoChangeDetection tests that build runs when git_update is false (no change detection)
+func TestDeployNoGitUpdateNoChangeDetection(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create a .git directory to simulate a git repo
+	gitDir := filepath.Join(tmpDir, ".git")
+	if err := os.MkdirAll(gitDir, 0755); err != nil {
+		t.Fatalf("Failed to create .git directory: %v", err)
+	}
+
+	var buf bytes.Buffer
+	logger := NewLogger(&buf, "", false)
+	deployer := NewDeployer(logger)
+
+	project := &ProjectConfig{
+		Name:           "TestProject",
+		WebhookPath:    "/hooks/test",
+		GitRepo:        "https://github.com/example/repo.git",
+		LocalPath:      tmpDir,
+		GitBranch:      "main",
+		GitUpdate:      false, // Disable git pull - no change detection
+		ExecutePath:    tmpDir,
+		ExecuteCommand: "echo 'deployed'",
+	}
+
+	ctx := context.Background()
+	result := deployer.Deploy(ctx, project, "WEBHOOK")
+
+	// Build should run (not skipped) since we're not doing git pull / change detection
+	if result.Skipped {
+		t.Errorf("Expected build to run when git_update is false (no change detection), but it was skipped")
+	}
+
+	if !result.Success {
+		t.Errorf("Expected deployment to succeed, got error: %s", result.Error)
+	}
+
+	logOutput := buf.String()
+
+	// Should see message about skipping git pull
+	if !strings.Contains(logOutput, "git_update is false, skipping git pull") {
+		t.Errorf("Expected log to contain 'git_update is false', got: %s", logOutput)
+	}
+}
+
+// TestDeployCloneAlwaysHasChanges tests that cloning always proceeds with build (considered as having changes)
+func TestDeployCloneAlwaysHasChanges(t *testing.T) {
+	// Create a source repository
+	sourceDir := t.TempDir()
+
+	// Initialize a git repo
+	cmd := exec.Command("git", "init")
+	cmd.Dir = sourceDir
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("Failed to init git repo: %v", err)
+	}
+
+	cmd = exec.Command("git", "config", "user.email", "test@example.com")
+	cmd.Dir = sourceDir
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("Failed to set git user email: %v", err)
+	}
+
+	cmd = exec.Command("git", "config", "user.name", "Test User")
+	cmd.Dir = sourceDir
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("Failed to set git user name: %v", err)
+	}
+
+	// Create initial commit
+	testFile := filepath.Join(sourceDir, "test.txt")
+	if err := os.WriteFile(testFile, []byte("test"), 0644); err != nil {
+		t.Fatalf("Failed to create test file: %v", err)
+	}
+
+	cmd = exec.Command("git", "add", "test.txt")
+	cmd.Dir = sourceDir
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("Failed to git add: %v", err)
+	}
+
+	cmd = exec.Command("git", "commit", "-m", "Initial commit")
+	cmd.Dir = sourceDir
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("Failed to git commit: %v", err)
+	}
+
+	cloneDir := t.TempDir()
+	targetPath := filepath.Join(cloneDir, "repo")
+
+	var buf bytes.Buffer
+	logger := NewLogger(&buf, "", false)
+	deployer := NewDeployer(logger)
+
+	ctx := context.Background()
+	branch, err := getCurrentBranch(ctx, sourceDir)
+	if err != nil {
+		t.Fatalf("Failed to get branch: %v", err)
+	}
+
+	project := &ProjectConfig{
+		Name:           "TestProject",
+		WebhookPath:    "/hooks/test",
+		GitRepo:        fmt.Sprintf("file://%s", sourceDir),
+		LocalPath:      targetPath,
+		GitBranch:      branch,
+		GitUpdate:      true,
+		ExecutePath:    targetPath,
+		ExecuteCommand: "echo 'deployed'",
+	}
+
+	// Deploy with clone - should always proceed with build
+	result := deployer.Deploy(ctx, project, "WEBHOOK")
+
+	if result.Skipped {
+		t.Errorf("Expected build to run after cloning (clone always has changes), but it was skipped")
+	}
+
+	if !result.Success {
+		t.Errorf("Expected deployment to succeed, got error: %s", result.Error)
+	}
+
+	logOutput := buf.String()
+
+	// Should see message about cloning
+	if !strings.Contains(logOutput, "Cloned repository") {
+		t.Errorf("Expected log to contain 'Cloned repository', got: %s", logOutput)
+	}
+}
+
+// TestTruncateSHA tests the truncateSHA helper function
+func TestTruncateSHA(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "full SHA",
+			input:    "1234567890abcdef1234567890abcdef12345678",
+			expected: "12345678",
+		},
+		{
+			name:     "exactly 8 characters",
+			input:    "12345678",
+			expected: "12345678",
+		},
+		{
+			name:     "less than 8 characters",
+			input:    "123",
+			expected: "123",
+		},
+		{
+			name:     "empty string",
+			input:    "",
+			expected: "",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			result := truncateSHA(tc.input)
+			if result != tc.expected {
+				t.Errorf("truncateSHA(%q) = %q, expected %q", tc.input, result, tc.expected)
+			}
+		})
+	}
+}
