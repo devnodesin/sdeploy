@@ -26,14 +26,50 @@ systemctl stop sdeploy
 mkdir -p /etc/sdeploy-keys
 chmod 700 /etc/sdeploy-keys
 
-echo "Copying sdeploy binary to /usr/local/bin..."
-cp sdeploy /usr/local/bin/
+# Copy sdeploy binary with confirmation
+if [ -f "/usr/local/bin/sdeploy" ]; then
+	read -p "/usr/local/bin/sdeploy already exists. Overwrite? (y/N): " -n 1 -r
+	echo
+	if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+		echo "Skipping binary installation."
+	else
+		echo "Copying sdeploy binary to /usr/local/bin..."
+		cp sdeploy /usr/local/bin/
+	fi
+else
+	echo "Copying sdeploy binary to /usr/local/bin..."
+	cp sdeploy /usr/local/bin/
+fi
 
-echo "Copying config files: /etc/sdeploy.conf"
-cp samples/sdeploy.conf /etc/sdeploy.conf
+# Copy config file with confirmation
+if [ -f "/etc/sdeploy.conf" ]; then
+	read -p "/etc/sdeploy.conf already exists. Overwrite? (y/N): " -n 1 -r
+	echo
+	if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+		echo "Skipping config file installation."
+	else
+		echo "Copying config files: /etc/sdeploy.conf"
+		cp samples/sdeploy.conf /etc/sdeploy.conf
+	fi
+else
+	echo "Copying config files: /etc/sdeploy.conf"
+	cp samples/sdeploy.conf /etc/sdeploy.conf
+fi
 
-echo "Copying systemd service files: /etc/systemd/system/sdeploy.service"
-cp samples/sdeploy.service /etc/systemd/system/sdeploy.service
+# Copy systemd service file with confirmation
+if [ -f "/etc/systemd/system/sdeploy.service" ]; then
+	read -p "/etc/systemd/system/sdeploy.service already exists. Overwrite? (y/N): " -n 1 -r
+	echo
+	if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+		echo "Skipping systemd service installation."
+	else
+		echo "Copying systemd service files: /etc/systemd/system/sdeploy.service"
+		cp samples/sdeploy.service /etc/systemd/system/sdeploy.service
+	fi
+else
+	echo "Copying systemd service files: /etc/systemd/system/sdeploy.service"
+	cp samples/sdeploy.service /etc/systemd/system/sdeploy.service
+fi
 
 echo "Reloading systemd, enabling sdeploy service..."
 systemctl daemon-reload
