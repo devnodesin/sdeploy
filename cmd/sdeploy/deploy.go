@@ -645,6 +645,10 @@ func (d *Deployer) sendNotification(project *ProjectConfig, result *DeployResult
 // 2. If trigger source is "WEBHOOK (unknown)" or just "WEBHOOK" -> skip build (unknown source, be safe)
 // 3. For "INTERNAL" or any other trigger -> don't skip (always build)
 // 4. For "WEBHOOK (<other_source>)" -> don't skip (always build for non-GitHub webhooks)
+//
+// Note: This function uses string matching on the enhanced trigger source format created in webhook.go
+// (e.g., "WEBHOOK (Github)", "INTERNAL"). This approach is intentional as it allows the webhook
+// handler to inject custom source names via the payload while maintaining backward compatibility.
 func shouldSkipBuildOnNoChanges(triggerSource string) bool {
 	// Check if it's a WEBHOOK trigger
 	if !strings.HasPrefix(triggerSource, "WEBHOOK") {

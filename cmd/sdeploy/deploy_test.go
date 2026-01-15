@@ -2045,7 +2045,7 @@ func TestDeployNoChangesWithDifferentTriggerSources(t *testing.T) {
 	
 	// Initialize bare git repo (acts as remote)
 	if err := exec.Command("git", "init", "--bare", bareRepo).Run(); err != nil {
-		t.Skip("Git not available, skipping test")
+		t.Skip("Git not available or failed to initialize, skipping test")
 	}
 	
 	// Clone from bare repo
@@ -2128,7 +2128,7 @@ func TestDeployNoChangesWithDifferentTriggerSources(t *testing.T) {
 				LocalPath:      repoPath,
 				ExecutePath:    repoPath,
 				ExecuteCommand: "echo test",
-				GitBranch:      "master",
+				GitBranch:      "master", // Using 'master' as it's the default for git init in this environment
 			}
 			
 			result := deployer.Deploy(context.Background(), project, tc.triggerSource)
