@@ -83,7 +83,9 @@ go build -o sdeploy ./cmd/sdeploy
 
 ### Running as a Service
 
-> **systemd service files:** See [`samples/sdeploy.service`](samples/sdeploy.service)
+> **systemd service files:** 
+> - [`samples/sdeploy.service`](samples/sdeploy.service) - Default service configuration
+> - [`samples/sdeploy-www-data.service`](samples/sdeploy-www-data.service) - Example for running as www-data user
 
 ## 📁 Project Folder Structure
 
@@ -106,7 +108,8 @@ sdeploy/
 ├── samples/
 │   ├── sdeploy.conf             # Minimal configuration example
 │   ├── sdeploy-full.conf        # Full configuration reference
-│   └── sdeploy.service          # systemd service file
+│   ├── sdeploy.service          # systemd service file (runs as root)
+│   └── sdeploy-www-data.service # systemd service file (runs as www-data user)
 ├── SPEC.md                      # This specification document
 ├── INSTALL.md                   # Installation instructions
 ├── README.md                    # Quick start guide
@@ -145,6 +148,7 @@ SDeploy uses YAML format for configuration.
 - All logs are timestamped and include severity level (INFO, WARN, ERROR)
 - Build logs are created per deployment and include only that build's output
 - In console mode, service logs go to stderr, but build logs still go to files
+- **Deployment status**: Final deployment status (success/failure) is logged to main.log with reference to build log path
 
 ### Email Configuration (`email_config`)
 
@@ -222,7 +226,10 @@ SDeploy supports per-project SSH key authentication for private git repositories
 | Branch Verification         | Ensures webhook payload branch matches configured branch                 |
 | Asynchronous Deployment     | Valid requests trigger deployment in background, respond `202 Accepted`  |
 | Pre-flight Directory Checks | Automatically creates directories with 0755 permissions                  |
+| Branch Checkout             | Ensures repository is on correct branch before operations                |
 | Git Operations              | Clone and pull support with configurable branch                          |
+| Custom Trigger Labels       | Use `triggered_by` field to identify deployment sources                  |
+| Deployment Status Logging   | Logs final deployment status to main.log with build log reference        |
 | Environment Variables       | Injects `SDEPLOY_PROJECT_NAME`, `SDEPLOY_TRIGGER_SOURCE`, etc.           |
 | Comprehensive Logging       | Logs to stdout/stderr (console) or file (daemon mode)                    |
 | Email Notifications         | Sends deployment summary emails when configured                          |
@@ -238,6 +245,12 @@ SDeploy performs automated pre-flight checks before each deployment.
 | Auto-Creation       | Missing directories are created with 0755 permissions       |
 | Path Defaults       | `execute_path` defaults to `local_path` if not set          |
 | Logging             | All directory creation actions are logged                   |
+| Branch Verification | Ensures repository is on configured branch before operations|
+
+**Branch Checkout Behavior:**
+- Before any git operations (pull) or command execution, SDeploy verifies the current branch
+- If the repository is on a different branch, it automatically checks out the configured branch
+- This ensures deployments always work with the correct branch, even if manual changes were made
 
 ### Error Handling
 
@@ -289,13 +302,14 @@ SDeploy supports hot reloading of the configuration file without daemon restart.
 6. **Asynchronous Trigger:** Start deployment in background, return `202 Accepted`.
 7. **Log Project Config:** Print project configuration for this build.
 8. **Pre-flight Checks:** Verify/create `local_path` and `execute_path` directories.
-9. **Git Operations:**
-   - If `git_repo` not set: Skip git operations.
-   - If repo not cloned: Clone repository.
-   - If `git_update` is true: Run `git pull`.
-10. **Build Decision Logic:** Determine if build should proceed (see Build Trigger Logic below).
-11. **Execution:** Run `execute_command` in `execute_path` (with timeout, env vars).
-12. **Cleanup:** Log result, send email notification (if configured), release lock.
+9. **Branch Verification:** Ensure repository is on configured branch, checkout if needed.
+10. **Git Operations:**
+    - If `git_repo` not set: Skip git operations.
+    - If repo not cloned: Clone repository.
+    - If `git_update` is true: Run `git pull`.
+11. **Build Decision Logic:** Determine if build should proceed (see Build Trigger Logic below).
+12. **Execution:** Run `execute_command` in `execute_path` (with timeout, env vars).
+13. **Cleanup:** Log result, log deployment status to main.log, send email notification (if configured), release lock.
 
 ## 🎯 Build Trigger Logic
 
@@ -324,6 +338,22 @@ When a build proceeds despite no changes:
 ```
 [INFO] No changes detected, but proceeding with build (trigger: INTERNAL)
 ```
+
+### Deployment Status Logging
+
+After each deployment completes, SDeploy logs the final status to main.log:
+
+**Success:**
+```
+[INFO] [ProjectName] Deployment successful (Refer build log file /var/log/sdeploy/project-2024-01-15-1430-success.log)
+```
+
+**Failure:**
+```
+[INFO] [ProjectName] Deployment error (Refer build log file /var/log/sdeploy/project-2024-01-15-1430-fail.log)
+```
+
+This provides quick status visibility in the main service log while keeping detailed build output in separate files.
 
 ### Use Cases
 
@@ -386,4 +416,62 @@ Trigger deployments on a schedule using the secret query parameter:
 ```
 
 SDeploy recognizes the missing HMAC signature, validates the secret query parameter, classifies as INTERNAL trigger, and proceeds with deployment.
+
+## 🎭 Custom Trigger Source Identification
+
+SDeploy automatically identifies and logs the source of deployment triggers for better traceability.
+
+### Trigger Source Detection
+
+| Authentication Method | Trigger Classification | Source Detection |
+|----------------------|------------------------|------------------|
+| HMAC Signature (`X-Hub-Signature-256`) | `WEBHOOK` | Determined from payload |
+| Query Parameter (`?secret=`) | `INTERNAL` or `WEBHOOK` | Based on `triggered_by` field |
+
+### Custom Trigger Source with `triggered_by`
+
+For internal triggers (using `?secret=`), you can specify a custom source by including `triggered_by` in the JSON payload:
+
+**Without `triggered_by`:**
+```sh
+curl -X POST "http://localhost:8080/hooks/frontend?secret=your_secret" \
+  -d '{"ref":"refs/heads/main"}'
+# Logged as: INTERNAL
+```
+
+**With `triggered_by`:**
+```sh
+curl -X POST "http://localhost:8080/hooks/frontend?secret=your_secret" \
+  -d '{"ref":"refs/heads/main","triggered_by":"Jenkins CI"}'
+# Logged as: WEBHOOK (Jenkins CI)
+
+curl -X POST "http://localhost:8080/hooks/frontend?secret=your_secret" \
+  -d '{"ref":"refs/heads/main","triggered_by":"WooCommerce: user john"}'
+# Logged as: WEBHOOK (WooCommerce: user john)
+```
+
+**Use Cases:**
+- **CI/CD Pipelines**: Identify which pipeline triggered the deployment
+- **E-commerce Webhooks**: Track deployments triggered by WooCommerce, Shopify, etc.
+- **Custom Integrations**: Label deployments from any third-party system
+
+### Automatic GitHub Detection
+
+For webhooks with HMAC signatures, SDeploy automatically detects GitHub sources:
+
+```json
+{
+  "ref": "refs/heads/main",
+  "sender": {
+    "url": "https://api.github.com/users/username"
+  }
+}
+```
+**Logged as:** `WEBHOOK (Github)`
+
+### Detection Priority
+
+1. **Custom `triggered_by` field** (highest priority) - Use this for custom labels
+2. **GitHub sender URL** - Automatic detection via `sender.url` field
+3. **Unknown** - Default when no identifiable source is found
 
