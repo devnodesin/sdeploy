@@ -501,6 +501,35 @@ func buildGitSSHCommand(sshKeyPath string) string {
 	return fmt.Sprintf("ssh -i %s -o StrictHostKeyChecking=accept-new -o IdentitiesOnly=yes", sshKeyPath)
 }
 
+// gitResetHard resets the repository to HEAD, discarding all local changes
+func (d *Deployer) gitResetHard(ctx context.Context, project *ProjectConfig, buildLogger *BuildLogger) error {
+	if buildLogger != nil {
+		buildLogger.Infof(project.Name, "Resetting local changes: git reset --hard")
+	}
+
+	// Use exec.Command directly with separate arguments to avoid shell injection
+	cmd := exec.CommandContext(ctx, "git", "reset", "--hard")
+	setProcessGroup(cmd)
+	cmd.Dir = project.LocalPath
+
+	// Set GIT_SSH_COMMAND if git_ssh_key_path is configured (though not needed for reset)
+	if project.GitSSHKeyPath != "" {
+		cmd.Env = append(os.Environ(), fmt.Sprintf("GIT_SSH_COMMAND=%s", buildGitSSHCommand(project.GitSSHKeyPath)))
+	}
+
+	output, err := cmd.CombinedOutput()
+
+	if buildLogger != nil && len(output) > 0 {
+		buildLogger.Infof(project.Name, "Output: %s", strings.TrimSpace(string(output)))
+	}
+
+	if err != nil {
+		return fmt.Errorf("%v: %s", err, string(output))
+	}
+
+	return nil
+}
+
 // gitClone clones a git repository to the specified local path
 func (d *Deployer) gitClone(ctx context.Context, project *ProjectConfig, buildLogger *BuildLogger) error {
 	// Create parent directories if they don't exist
@@ -540,6 +569,11 @@ func (d *Deployer) gitClone(ctx context.Context, project *ProjectConfig, buildLo
 
 // gitPull executes git pull in the project's local path
 func (d *Deployer) gitPull(ctx context.Context, project *ProjectConfig, buildLogger *BuildLogger) error {
+	// First, reset any local changes to avoid merge conflicts
+	if err := d.gitResetHard(ctx, project, buildLogger); err != nil {
+		return fmt.Errorf("failed to reset local changes: %v", err)
+	}
+
 	if buildLogger != nil {
 		buildLogger.Infof(project.Name, "Running: git pull")
 		buildLogger.Infof(project.Name, "Path: %s", project.LocalPath)
