@@ -507,15 +507,10 @@ func (d *Deployer) gitResetHard(ctx context.Context, project *ProjectConfig, bui
 		buildLogger.Infof(project.Name, "Resetting local changes: git reset --hard")
 	}
 
-	// Use exec.Command directly with separate arguments to avoid shell injection
+	// Use exec.CommandContext directly with separate arguments to avoid shell injection
 	cmd := exec.CommandContext(ctx, "git", "reset", "--hard")
 	setProcessGroup(cmd)
 	cmd.Dir = project.LocalPath
-
-	// Set GIT_SSH_COMMAND if git_ssh_key_path is configured (though not needed for reset)
-	if project.GitSSHKeyPath != "" {
-		cmd.Env = append(os.Environ(), fmt.Sprintf("GIT_SSH_COMMAND=%s", buildGitSSHCommand(project.GitSSHKeyPath)))
-	}
 
 	output, err := cmd.CombinedOutput()
 

@@ -2261,8 +2261,6 @@ func TestGitResetBeforePull(t *testing.T) {
 	}
 	
 	// Configure git user for commits
-	exec.Command("git", "config", "user.email", "test@example.com").Run()
-	exec.Command("git", "config", "user.name", "Test User").Run()
 	cmd = exec.Command("git", "config", "user.email", "test@example.com")
 	cmd.Dir = repoDir
 	cmd.Run()
