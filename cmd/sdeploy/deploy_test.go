@@ -2242,3 +2242,226 @@ func TestDeploymentStatusLogging(t *testing.T) {
 		t.Errorf("Expected 1 'Deployment successful' message, got %d in: %s", count, logOutput)
 	}
 }
+
+// TestGitResetBeforePull tests that local changes are reset before git pull
+func TestGitResetBeforePull(t *testing.T) {
+	tmpDir := t.TempDir()
+	
+	// Create a real git repository with a commit
+	repoDir := filepath.Join(tmpDir, "test-repo")
+	if err := os.MkdirAll(repoDir, 0755); err != nil {
+		t.Fatalf("Failed to create repo dir: %v", err)
+	}
+	
+	// Initialize git repo
+	cmd := exec.Command("git", "init")
+	cmd.Dir = repoDir
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("Failed to init git repo: %v", err)
+	}
+	
+	// Configure git user for commits
+	cmd = exec.Command("git", "config", "user.email", "test@example.com")
+	cmd.Dir = repoDir
+	cmd.Run()
+	cmd = exec.Command("git", "config", "user.name", "Test User")
+	cmd.Dir = repoDir
+	cmd.Run()
+	
+	// Create a test file and commit it
+	testFile := filepath.Join(repoDir, "test.txt")
+	if err := os.WriteFile(testFile, []byte("original content\n"), 0644); err != nil {
+		t.Fatalf("Failed to write test file: %v", err)
+	}
+	
+	cmd = exec.Command("git", "add", "test.txt")
+	cmd.Dir = repoDir
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("Failed to git add: %v", err)
+	}
+	
+	cmd = exec.Command("git", "commit", "-m", "Initial commit")
+	cmd.Dir = repoDir
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("Failed to git commit: %v", err)
+	}
+	
+	// Create local changes that would block git pull
+	if err := os.WriteFile(testFile, []byte("modified content\n"), 0644); err != nil {
+		t.Fatalf("Failed to modify test file: %v", err)
+	}
+	
+	// Verify file was modified
+	content, err := os.ReadFile(testFile)
+	if err != nil {
+		t.Fatalf("Failed to read modified file: %v", err)
+	}
+	if string(content) != "modified content\n" {
+		t.Fatalf("File should be modified, got: %s", string(content))
+	}
+	
+	// Create a logger to capture output
+	var buf bytes.Buffer
+	logger := NewLogger(&buf, "", false)
+	deployer := NewDeployer(logger)
+	
+	// Create a project configuration
+	project := &ProjectConfig{
+		Name:           "TestProject",
+		WebhookPath:    "/hooks/test",
+		GitRepo:        "file://" + repoDir, // Dummy repo for testing
+		LocalPath:      repoDir,
+		GitBranch:      "master",
+		GitUpdate:      true,
+		ExecutePath:    repoDir,
+		ExecuteCommand: "echo done",
+	}
+	
+	// Call gitResetHard directly to test the function
+	ctx := context.Background()
+	buildLogger := logger.NewBuildLogger(project.Name)
+	if err := deployer.gitResetHard(ctx, project, buildLogger); err != nil {
+		buildLogger.Close(false)
+		t.Fatalf("gitResetHard failed: %v", err)
+	}
+	buildLogger.Close(true)
+	
+	// After reset, the file should be back to original content
+	content, err = os.ReadFile(testFile)
+	if err != nil {
+		t.Fatalf("Failed to read file after reset: %v", err)
+	}
+	if string(content) != "original content\n" {
+		t.Errorf("Expected file to be reset to 'original content\\n', got: %s", string(content))
+	}
+}
+
+// TestGitPullWithLocalChanges tests the full deployment flow with local changes
+func TestGitPullWithLocalChanges(t *testing.T) {
+	tmpDir := t.TempDir()
+	
+	// Create a bare repo to clone from
+	bareRepoDir := filepath.Join(tmpDir, "bare-repo.git")
+	if err := os.MkdirAll(bareRepoDir, 0755); err != nil {
+		t.Fatalf("Failed to create bare repo dir: %v", err)
+	}
+	
+	// Initialize bare git repo
+	cmd := exec.Command("git", "init", "--bare")
+	cmd.Dir = bareRepoDir
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("Failed to init bare git repo: %v", err)
+	}
+	
+	// Create a temporary repo to push initial content
+	initRepoDir := filepath.Join(tmpDir, "init-repo")
+	if err := os.MkdirAll(initRepoDir, 0755); err != nil {
+		t.Fatalf("Failed to create init repo dir: %v", err)
+	}
+	
+	cmd = exec.Command("git", "init")
+	cmd.Dir = initRepoDir
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("Failed to init git repo: %v", err)
+	}
+	
+	// Configure git user
+	cmd = exec.Command("git", "config", "user.email", "test@example.com")
+	cmd.Dir = initRepoDir
+	cmd.Run()
+	cmd = exec.Command("git", "config", "user.name", "Test User")
+	cmd.Dir = initRepoDir
+	cmd.Run()
+	
+	// Create and commit a file
+	testFile := filepath.Join(initRepoDir, "data.json")
+	if err := os.WriteFile(testFile, []byte(`{"version": "1.0"}`), 0644); err != nil {
+		t.Fatalf("Failed to write test file: %v", err)
+	}
+	
+	cmd = exec.Command("git", "add", ".")
+	cmd.Dir = initRepoDir
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("Failed to git add: %v", err)
+	}
+	
+	cmd = exec.Command("git", "commit", "-m", "Initial commit")
+	cmd.Dir = initRepoDir
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("Failed to git commit: %v", err)
+	}
+	
+	// Push to bare repo
+	cmd = exec.Command("git", "remote", "add", "origin", bareRepoDir)
+	cmd.Dir = initRepoDir
+	cmd.Run()
+	
+	// Get the default branch name
+	cmd = exec.Command("git", "rev-parse", "--abbrev-ref", "HEAD")
+	cmd.Dir = initRepoDir
+	branchOutput, err := cmd.Output()
+	if err != nil {
+		t.Fatalf("Failed to get branch name: %v", err)
+	}
+	branchName := strings.TrimSpace(string(branchOutput))
+	
+	cmd = exec.Command("git", "push", "-u", "origin", branchName)
+	cmd.Dir = initRepoDir
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("Failed to push to bare repo: %v", err)
+	}
+	
+	// Now clone the bare repo to a local path
+	localRepoDir := filepath.Join(tmpDir, "local-repo")
+	cmd = exec.Command("git", "clone", bareRepoDir, localRepoDir)
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("Failed to clone repo: %v", err)
+	}
+	
+	// Make local changes to simulate the issue
+	localDataFile := filepath.Join(localRepoDir, "data.json")
+	if err := os.WriteFile(localDataFile, []byte(`{"version": "1.0", "modified": true}`), 0644); err != nil {
+		t.Fatalf("Failed to modify local file: %v", err)
+	}
+	
+	// Create a logger to capture output
+	var buf bytes.Buffer
+	logger := NewLogger(&buf, "", false)
+	deployer := NewDeployer(logger)
+	
+	// Create a project configuration
+	project := &ProjectConfig{
+		Name:           "TestProject",
+		WebhookPath:    "/hooks/test",
+		GitRepo:        bareRepoDir,
+		LocalPath:      localRepoDir,
+		GitBranch:      branchName,
+		GitUpdate:      true,
+		ExecutePath:    localRepoDir,
+		ExecuteCommand: "echo deployment complete",
+	}
+	
+	// Attempt to deploy - should succeed even with local changes
+	ctx := context.Background()
+	result := deployer.Deploy(ctx, project, "WEBHOOK (test)")
+	
+	// Deployment should succeed
+	if !result.Success {
+		t.Errorf("Expected deployment to succeed, got error: %s, output: %s", result.Error, buf.String())
+	}
+	
+	// Verify local changes were reset
+	content, err := os.ReadFile(localDataFile)
+	if err != nil {
+		t.Fatalf("Failed to read file after deployment: %v", err)
+	}
+	if strings.Contains(string(content), "modified") {
+		t.Errorf("Expected local changes to be reset, but file still contains 'modified': %s", string(content))
+	}
+	
+	// Verify log output mentions reset
+	logOutput := buf.String()
+	if !strings.Contains(logOutput, "Resetting local changes") && !strings.Contains(logOutput, "git reset") {
+		t.Log("Log output should mention git reset (warning - check if logging is configured correctly)")
+	}
+}
