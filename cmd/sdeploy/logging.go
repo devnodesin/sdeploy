@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 )
@@ -36,6 +37,7 @@ type BuildLogger struct {
 	writer      io.Writer
 	file        *os.File
 	projectName string
+	logDir      string // base directory for log files
 	startTime   time.Time
 	logPath     string // temporary path without status
 	finalPath   string // final path with success/fail status
@@ -122,6 +124,9 @@ func (l *Logger) NewBuildLogger(projectName string) *BuildLogger {
 		logDir = Defaults.LogPath
 	}
 
+	// Store the log directory for later use
+	bl.logDir = logDir
+
 	// Ensure log directory exists
 	if err := os.MkdirAll(logDir, 0755); err != nil {
 		// Fallback to stderr if directory creation fails
@@ -132,8 +137,10 @@ func (l *Logger) NewBuildLogger(projectName string) *BuildLogger {
 
 	// Create temporary filename (without status)
 	// Format: {project_name}-{yyyy-mm-dd}-{HHMM}-pending.log
+	// Sanitize project name to prevent nested directories
+	sanitizedName := sanitizeProjectName(projectName)
 	timestamp := bl.startTime.Format("2006-01-02-1504")
-	tempFilename := fmt.Sprintf("%s-%s-pending.log", projectName, timestamp)
+	tempFilename := fmt.Sprintf("%s-%s-pending.log", sanitizedName, timestamp)
 	bl.logPath = filepath.Join(logDir, tempFilename)
 
 	// Open the build log file
@@ -172,11 +179,12 @@ func (bl *BuildLogger) Close(success bool) {
 			status = "success"
 		}
 
-		// Determine final filename
-		dir := filepath.Dir(bl.logPath)
+		// Determine final filename using stored logDir
+		// Sanitize project name to prevent nested directories
+		sanitizedName := sanitizeProjectName(bl.projectName)
 		timestamp := bl.startTime.Format("2006-01-02-1504")
-		finalFilename := fmt.Sprintf("%s-%s-%s.log", bl.projectName, timestamp, status)
-		bl.finalPath = filepath.Join(dir, finalFilename)
+		finalFilename := fmt.Sprintf("%s-%s-%s.log", sanitizedName, timestamp, status)
+		bl.finalPath = filepath.Join(bl.logDir, finalFilename)
 
 		// Rename the file
 		if err := os.Rename(bl.logPath, bl.finalPath); err != nil {
@@ -305,6 +313,15 @@ func ensureParentDir(filePath string) error {
 		return nil
 	}
 	return os.MkdirAll(dir, 0755)
+}
+
+// sanitizeProjectName replaces path separators in project names with underscores
+// This prevents project names like "domain.com/project" from creating nested directories
+func sanitizeProjectName(projectName string) string {
+	// Replace both forward and back slashes with underscores
+	sanitized := strings.ReplaceAll(projectName, "/", "_")
+	sanitized = strings.ReplaceAll(sanitized, "\\", "_")
+	return sanitized
 }
 
 // IsDaemonMode returns whether the logger is in daemon mode

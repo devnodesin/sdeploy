@@ -416,3 +416,57 @@ func TestBuildLoggerWritesToCorrectFile(t *testing.T) {
 		t.Error("Expected build log to contain [ERROR] level")
 	}
 }
+
+// TestBuildLoggerProjectNameWithSlashes tests that project names with slashes work correctly
+func TestBuildLoggerProjectNameWithSlashes(t *testing.T) {
+	tmpDir := t.TempDir()
+	logPath := tmpDir
+
+	logger := NewLogger(nil, logPath, true)
+	defer logger.Close()
+
+	// Project name with slash (e.g., "domain.com/project")
+	projectName := "net.asensar.in/docs"
+	buildLogger := logger.NewBuildLogger(projectName)
+	buildLogger.Info(projectName, "Build started")
+	buildLogger.Close(true) // success
+
+	// Find the log file - look recursively
+	var buildLogFile string
+	var foundPath string
+	filepath.Walk(tmpDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return nil
+		}
+		if !info.IsDir() && strings.HasSuffix(info.Name(), "-success.log") {
+			buildLogFile = info.Name()
+			foundPath = path
+			return filepath.SkipAll
+		}
+		return nil
+	})
+
+	if buildLogFile == "" {
+		t.Fatal("Expected build log file not found")
+	}
+
+	// Verify the file exists
+	if _, err := os.Stat(foundPath); os.IsNotExist(err) {
+		t.Errorf("Expected log file at %s, but it doesn't exist", foundPath)
+	}
+
+	// Verify content
+	content, err := os.ReadFile(foundPath)
+	if err != nil {
+		t.Fatalf("Failed to read build log file: %v", err)
+	}
+
+	if !strings.Contains(string(content), "Build started") {
+		t.Error("Expected build log to contain message")
+	}
+
+	// Verify the file is directly in the log directory (not nested)
+	if filepath.Dir(foundPath) != tmpDir {
+		t.Errorf("Expected log file to be in root directory %s, but found in: %s", tmpDir, filepath.Dir(foundPath))
+	}
+}
