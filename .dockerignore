@@ -1,0 +1,47 @@
+# Git
+.git
+.gitignore
+.github
+
+# Documentation and examples
+*.md
+SPEC.md
+INSTALL.md
+README.md
+AGENTS.md
+LICENSE
+samples/
+docs/
+example/
+
+# Build artifacts
+sdeploy
+/bin
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test files and artifacts
+*.test
+*.out
+coverage.*
+*.coverprofile
+profile.cov
+
+# IDE and editor files
+.idea
+.vscode
+temp/
+/temp
+
+# Environment files
+.env
+
+# Go workspace
+go.work
+go.work.sum
+
+# Install scripts (not needed in container)
+install.sh
