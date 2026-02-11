@@ -27,6 +27,19 @@ go build -o sdeploy ./cmd/sdeploy
 ./sdeploy -c sdeploy.conf -d
 ```
 
+**With Docker:**
+
+```sh
+# Build
+docker build -t sdeploy:latest .
+
+# Run
+docker run -d -p 8080:8080 \
+  -v /path/to/sdeploy.conf:/etc/sdeploy.conf:ro \
+  -v /var/log/sdeploy:/var/log/sdeploy \
+  sdeploy:latest
+```
+
 See [INSTALL.md](INSTALL.md) for detailed build, test, and deployment instructions.
 
 ## Usage

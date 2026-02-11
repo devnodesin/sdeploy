@@ -28,6 +28,61 @@ docker run --rm -v "$(pwd):/app" -w /app golang:latest \
   sh -c "go test ./cmd/sdeploy/... -v"
 ```
 
+### Docker Container Build & Run
+
+SDeploy includes a production-ready Dockerfile that creates a minimal, secure container image.
+
+#### Build Docker Image
+
+```sh
+docker build -t sdeploy:latest .
+```
+
+#### Run with Docker
+
+**Basic usage:**
+
+```sh
+docker run -d \
+  --name sdeploy \
+  -p 8080:8080 \
+  -v /path/to/sdeploy.conf:/etc/sdeploy.conf:ro \
+  -v /var/log/sdeploy:/var/log/sdeploy \
+  sdeploy:latest
+```
+
+**With custom working directories for deployments:**
+
+```sh
+docker run -d \
+  --name sdeploy \
+  -p 8080:8080 \
+  -v /path/to/sdeploy.conf:/etc/sdeploy.conf:ro \
+  -v /var/log/sdeploy:/var/log/sdeploy \
+  -v /opt/deployments:/opt/deployments \
+  sdeploy:latest
+```
+
+**With SSH keys for private repositories:**
+
+```sh
+docker run -d \
+  --name sdeploy \
+  -p 8080:8080 \
+  -v /path/to/sdeploy.conf:/etc/sdeploy.conf:ro \
+  -v /var/log/sdeploy:/var/log/sdeploy \
+  -v /etc/sdeploy-keys:/etc/sdeploy-keys:ro \
+  sdeploy:latest
+```
+
+#### Docker Image Features
+
+- **Multi-stage build**: Minimal final image size (~183MB)
+- **Static binary**: No runtime dependencies except git and ca-certificates
+- **Security**: Runs as non-root user (uid/gid 1000)
+- **Health check**: Automatic health monitoring
+- **Production-ready**: Based on Debian Bookworm Slim for stability
+
 ## Run
 
 ```sh
