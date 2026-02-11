@@ -466,12 +466,7 @@ func TestBuildLoggerProjectNameWithSlashes(t *testing.T) {
 	}
 
 	// Verify the file is directly in the log directory (not nested)
-	relPath, err := filepath.Rel(tmpDir, foundPath)
-	if err != nil {
-		t.Fatalf("Failed to get relative path: %v", err)
-	}
-	// The file should not contain directory separators (except on Windows where it might be normalized differently)
-	if strings.Contains(relPath, string(filepath.Separator)) {
-		t.Errorf("Expected log file to be in root directory, but found at nested path: %s", relPath)
+	if filepath.Dir(foundPath) != tmpDir {
+		t.Errorf("Expected log file to be in root directory %s, but found in: %s", tmpDir, filepath.Dir(foundPath))
 	}
 }
