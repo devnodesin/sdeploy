@@ -78,8 +78,8 @@ go build -o sdeploy ./cmd/sdeploy
 
 | Mode         | Command           | Description                                                                 |
 |--------------|-------------------|-----------------------------------------------------------------------------|
-| Console      | `./sdeploy`       | Foreground, blocking. Output to stdout/stderr. Used for testing/setup.      |
-| Daemon       | `./sdeploy -d`    | Background service. Output to log file. For use with system services.       |
+| Console      | `./sdeploy`       | Foreground, blocking. Service logs go to both main.log and stderr. Used for testing/setup.      |
+| Daemon       | `./sdeploy -d`    | Background service. Service logs go to main.log only. For use with system services.       |
 
 ### Running as a Service
 
@@ -143,11 +143,13 @@ SDeploy uses YAML format for configuration.
 | `projects`     | array  | —                    | List of project configurations                 |
 
 **Logging Details:**
-- **Service logs**: Written to `{log_path}/main.log` (or stderr in console mode)
+- **Service logs**: Always written to `{log_path}/main.log` regardless of mode
+  - In **console mode** (foreground): logs written to both `{log_path}/main.log` and `stderr` for real-time visibility
+  - In **daemon mode** (background): logs written only to `{log_path}/main.log`
 - **Build logs**: Written to `{log_path}/{project_name}-{yyyy-mm-dd}-{HHMM}-{success|fail}.log`
 - All logs are timestamped and include severity level (INFO, WARN, ERROR)
 - Build logs are created per deployment and include only that build's output
-- In console mode, service logs go to stderr, but build logs still go to files
+- Build logs always go to files in both console and daemon modes
 - **Deployment status**: Final deployment status (success/failure) is logged to main.log with reference to build log path
 
 ### Email Configuration (`email_config`)
