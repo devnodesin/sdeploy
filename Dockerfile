@@ -38,23 +38,16 @@ RUN apt-get update && \
     apt-get install -y --no-install-recommends ca-certificates git wget openssh-client curl rsync  && \
     rm -rf /var/lib/apt/lists/*
 
-# Create non-root user for security
-RUN groupadd -g 1000 sdeploy && \
-    useradd -m -u 1000 -g sdeploy -s /bin/bash sdeploy
 
 # Create directories with proper permissions
-RUN mkdir -p /var/log/sdeploy && \
-    chown -R sdeploy:sdeploy /var/log/sdeploy
+RUN mkdir -p /var/log/sdeploy
 
 # Copy binary from builder
 COPY --from=builder /build/sdeploy /usr/local/bin/sdeploy
 
-# Set ownership and make executable
-RUN chown sdeploy:sdeploy /usr/local/bin/sdeploy && \
-    chmod +x /usr/local/bin/sdeploy
+# Set executable permission (ownership remains root)
+RUN chmod +x /usr/local/bin/sdeploy
 
-# Switch to non-root user
-USER sdeploy
 
 # Set working directory
 WORKDIR /home/sdeploy
