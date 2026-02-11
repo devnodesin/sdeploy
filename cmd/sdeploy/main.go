@@ -21,8 +21,8 @@ func main() {
 	flag.Parse()
 
 	// Note: daemonMode flag controls logging behavior:
-	// - Console mode (no -d): logs to stderr for interactive use
-	// - Daemon mode (-d): logs to file for background service use
+	// - Console mode (no -d): service logs go to both main.log and stderr
+	// - Daemon mode (-d): service logs go only to main.log
 
 	if *showHelp {
 		printUsage()
@@ -45,8 +45,10 @@ func main() {
 	}
 
 	// Initialize logger
-	// Console mode: logs to stderr for interactive use (but build logs still go to files)
-	// Daemon mode: logs to main.log file for background service use
+	// Service logs always written to main.log regardless of mode
+	// Console mode: service logs also go to stderr for real-time visibility
+	// Daemon mode: service logs go only to main.log
+	// Build logs always go to files in both modes
 	logPath := cfg.LogPath
 	if logPath == "" {
 		logPath = Defaults.LogPath
@@ -146,7 +148,8 @@ func logConfigSummary(logger *Logger, cfg *Config, daemonMode bool) {
 		logger.Infof("", "  Service Log: %s/main.log", logPath)
 		logger.Infof("", "  Build Logs: %s/{project}-{date}-{time}-{status}.log", logPath)
 	} else {
-		logger.Info("", "  Service Log: console (stderr)")
+		logger.Infof("", "  Log Directory: %s", logPath)
+		logger.Infof("", "  Service Log: %s/main.log + stderr (console)", logPath)
 		logger.Infof("", "  Build Logs: %s/{project}-{date}-{time}-{status}.log", logPath)
 	}
 	if IsEmailConfigValid(cfg.EmailConfig) {

@@ -45,10 +45,11 @@ type BuildLogger struct {
 }
 
 // NewLogger creates a new logger instance
+// Service logs are always written to {log_path}/main.log regardless of mode
 // If writer is provided, logs go to that writer (used for testing)
 // If logPath is provided, it's used as the base log directory
-// If daemonMode is false, service logs go to stderr (console mode)
-// If daemonMode is true, service logs go to main.log in the log directory
+// If daemonMode is false (console mode), service logs go to both main.log and stderr
+// If daemonMode is true (daemon mode), service logs go only to main.log
 // Falls back to stderr when file operations fail
 func NewLogger(writer io.Writer, logPath string, daemonMode bool) *Logger {
 	l := &Logger{
@@ -67,19 +68,6 @@ func NewLogger(writer io.Writer, logPath string, daemonMode bool) *Logger {
 		return l
 	}
 
-	// In console mode (non-daemon), service logs go to stderr
-	if !daemonMode {
-		l.writer = os.Stderr
-		// Still store logPath for build loggers
-		if logPath != "" {
-			l.logPath = logPath
-		} else {
-			l.logPath = Defaults.LogPath
-		}
-		return l
-	}
-
-	// Daemon mode: write service logs to main.log in log directory
 	// Determine log directory
 	if logPath != "" {
 		l.logPath = logPath
@@ -94,16 +82,27 @@ func NewLogger(writer io.Writer, logPath string, daemonMode bool) *Logger {
 		return l
 	}
 
-	// Open main.log file for service logs
+	// Open main.log file for service logs (always, regardless of mode)
 	mainLogPath := filepath.Join(l.logPath, "main.log")
 	file, err := os.OpenFile(mainLogPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
 	if err != nil {
 		reportLogFileError("open/create file", mainLogPath, err, "0644")
 		l.writer = os.Stderr
+		return l
+	}
+
+	l.file = file
+
+	// In console mode: logs go to both main.log and stderr
+	// In daemon mode: logs go only to main.log
+	if !daemonMode {
+		// Console mode: use MultiWriter to write to both file and stderr
+		l.writer = io.MultiWriter(file, os.Stderr)
 	} else {
-		l.file = file
+		// Daemon mode: write only to file
 		l.writer = file
 	}
+
 	return l
 }
 

@@ -470,3 +470,90 @@ func TestBuildLoggerProjectNameWithSlashes(t *testing.T) {
 		t.Errorf("Expected log file to be in root directory %s, but found in: %s", tmpDir, filepath.Dir(foundPath))
 	}
 }
+
+// TestConsoleModeDualLogging tests that console mode logs to both main.log and stderr
+func TestConsoleModeDualLogging(t *testing.T) {
+	tmpDir := t.TempDir()
+	logPath := tmpDir
+
+	// Console mode (daemonMode=false)
+	logger := NewLogger(nil, logPath, false)
+	defer logger.Close()
+
+	// Log a message
+	logger.Info("", "Console mode test message")
+
+	// Verify main.log was created and contains the message
+	mainLogPath := filepath.Join(logPath, "main.log")
+	content, err := os.ReadFile(mainLogPath)
+	if err != nil {
+		t.Fatalf("Failed to read main.log in console mode: %v", err)
+	}
+
+	if !strings.Contains(string(content), "Console mode test message") {
+		t.Error("Expected main.log to contain service message in console mode")
+	}
+}
+
+// TestDaemonModeOnlyMainLog tests that daemon mode logs only to main.log
+func TestDaemonModeOnlyMainLog(t *testing.T) {
+	tmpDir := t.TempDir()
+	logPath := tmpDir
+
+	// Daemon mode (daemonMode=true)
+	logger := NewLogger(nil, logPath, true)
+	defer logger.Close()
+
+	// Log a message
+	logger.Info("", "Daemon mode test message")
+
+	// Verify main.log was created and contains the message
+	mainLogPath := filepath.Join(logPath, "main.log")
+	content, err := os.ReadFile(mainLogPath)
+	if err != nil {
+		t.Fatalf("Failed to read main.log in daemon mode: %v", err)
+	}
+
+	if !strings.Contains(string(content), "Daemon mode test message") {
+		t.Error("Expected main.log to contain service message in daemon mode")
+	}
+}
+
+// TestAlwaysCreatesMainLog tests that main.log is created in both console and daemon modes
+func TestAlwaysCreatesMainLog(t *testing.T) {
+	tests := []struct {
+		name       string
+		daemonMode bool
+	}{
+		{"Console Mode", false},
+		{"Daemon Mode", true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tmpDir := t.TempDir()
+			logPath := tmpDir
+
+			logger := NewLogger(nil, logPath, tt.daemonMode)
+			defer logger.Close()
+
+			logger.Info("", "Test message")
+
+			// Verify main.log exists
+			mainLogPath := filepath.Join(logPath, "main.log")
+			if _, err := os.Stat(mainLogPath); os.IsNotExist(err) {
+				t.Errorf("Expected main.log to be created in %s mode", tt.name)
+			}
+
+			// Verify content
+			content, err := os.ReadFile(mainLogPath)
+			if err != nil {
+				t.Fatalf("Failed to read main.log: %v", err)
+			}
+
+			if !strings.Contains(string(content), "Test message") {
+				t.Errorf("Expected main.log to contain message in %s mode", tt.name)
+			}
+		})
+	}
+}
