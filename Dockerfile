@@ -41,6 +41,7 @@ RUN apt-get update && \
 
 # Create directories with proper permissions
 RUN mkdir -p /var/log/sdeploy
+RUN echo "Sdeploy log dir" > /var/log/sdeploy/log.file
 
 # Copy binary from builder
 COPY --from=builder /build/sdeploy /usr/local/bin/sdeploy
