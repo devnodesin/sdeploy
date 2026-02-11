@@ -35,7 +35,7 @@ FROM debian:bookworm-slim
 # git: Required for git operations (clone, pull)
 # wget: Required for health check
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends ca-certificates git wget openssh-client && \
+    apt-get install -y --no-install-recommends ca-certificates git wget openssh-client curl rsync  && \
     rm -rf /var/lib/apt/lists/*
 
 # Create non-root user for security
