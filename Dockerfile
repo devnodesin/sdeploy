@@ -41,6 +41,8 @@ RUN apt-get update && \
     apt-get install -y --no-install-recommends nodejs && \
     rm -rf /var/lib/apt/lists/*
 
+    
+RUN npm install -g npm@11.10.0
 
 # Create directories with proper permissions
 RUN mkdir -p /var/log/sdeploy
