@@ -35,7 +35,10 @@ FROM debian:bookworm-slim
 # git: Required for git operations (clone, pull)
 # wget: Required for health check
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends ca-certificates git wget openssh-client curl rsync  && \
+    apt-get install -y --no-install-recommends ca-certificates git wget openssh-client curl rsync curl && \
+    # Install Node.js 18.x LTS
+    curl -fsSL https://deb.nodesource.com/setup_18.x | bash - && \
+    apt-get install -y --no-install-recommends nodejs && \
     rm -rf /var/lib/apt/lists/*
 
 
