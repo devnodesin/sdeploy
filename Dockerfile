@@ -36,8 +36,8 @@ FROM debian:bookworm-slim
 # wget: Required for health check
 RUN apt-get update && \
     apt-get install -y --no-install-recommends ca-certificates git wget openssh-client curl rsync curl && \
-    # Install Node.js 18.x LTS
-    curl -fsSL https://deb.nodesource.com/setup_18.x | bash - && \
+    # Install Node.js 22.x LTS
+    curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && \
     apt-get install -y --no-install-recommends nodejs && \
     rm -rf /var/lib/apt/lists/*
 
