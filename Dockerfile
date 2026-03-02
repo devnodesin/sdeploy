@@ -42,7 +42,7 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/*
 
     
-RUN npm install -g npm@11.10.0
+RUN npm install -g npm@latest && npm update -g
 
 # Create directories with proper permissions
 RUN mkdir -p /var/log/sdeploy
