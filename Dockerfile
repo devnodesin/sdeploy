@@ -41,9 +41,6 @@ RUN apt-get update && \
     apt-get install -y --no-install-recommends nodejs && \
     rm -rf /var/lib/apt/lists/*
 
-    
-RUN npm install -g npm@latest && npm update -g
-
 # Create directories with proper permissions
 RUN mkdir -p /var/log/sdeploy
 RUN echo "Sdeploy log dir" > /var/log/sdeploy/log.file
