@@ -192,6 +192,9 @@ func TestDeployEnvVars(t *testing.T) {
 	}
 
 	envStr := string(content)
+	if !strings.Contains(envStr, "SDEPLOY_VERSION="+Version) {
+		t.Error("Expected SDEPLOY_VERSION env var")
+	}
 	if !strings.Contains(envStr, "SDEPLOY_PROJECT_NAME=MyProject") {
 		t.Error("Expected SDEPLOY_PROJECT_NAME env var")
 	}
@@ -2463,5 +2466,73 @@ func TestGitPullWithLocalChanges(t *testing.T) {
 	logOutput := buf.String()
 	if !strings.Contains(logOutput, "Resetting local changes") && !strings.Contains(logOutput, "git reset") {
 		t.Log("Log output should mention git reset (warning - check if logging is configured correctly)")
+	}
+}
+
+// TestDeployProjectEnvVariables tests that env_variables config values are passed to the command
+func TestDeployProjectEnvVariables(t *testing.T) {
+	tmpDir := t.TempDir()
+	envFile := filepath.Join(tmpDir, "env.txt")
+
+	deployer := NewDeployer(nil)
+	project := &ProjectConfig{
+		Name:           "EnvVarProject",
+		WebhookPath:    "/hooks/test",
+		ExecutePath:    tmpDir,
+		ExecuteCommand: "env > env.txt",
+		EnvVariables: []string{
+			"BUILD_DIR=/tmp/mybuild",
+			"DEPLOY_DIR=/var/www/html/",
+			"VITE_API_BASE_URL=https://api.example.com/",
+		},
+	}
+
+	result := deployer.Deploy(context.Background(), project, "WEBHOOK")
+	if !result.Success {
+		t.Fatalf("Deployment failed: %s", result.Error)
+	}
+
+	content, err := os.ReadFile(envFile)
+	if err != nil {
+		t.Fatalf("Failed to read env file: %v", err)
+	}
+
+	envStr := string(content)
+	if !strings.Contains(envStr, "BUILD_DIR=/tmp/mybuild") {
+		t.Errorf("Expected BUILD_DIR env var in output:\n%s", envStr)
+	}
+	if !strings.Contains(envStr, "DEPLOY_DIR=/var/www/html/") {
+		t.Errorf("Expected DEPLOY_DIR env var in output:\n%s", envStr)
+	}
+	if !strings.Contains(envStr, "VITE_API_BASE_URL=https://api.example.com/") {
+		t.Errorf("Expected VITE_API_BASE_URL env var in output:\n%s", envStr)
+	}
+}
+
+// TestDeploySDeployVersionAlwaysSet tests that SDEPLOY_VERSION is always injected
+func TestDeploySDeployVersionAlwaysSet(t *testing.T) {
+	tmpDir := t.TempDir()
+	envFile := filepath.Join(tmpDir, "env.txt")
+
+	deployer := NewDeployer(nil)
+	project := &ProjectConfig{
+		Name:           "VersionProject",
+		WebhookPath:    "/hooks/test",
+		ExecutePath:    tmpDir,
+		ExecuteCommand: "env > env.txt",
+	}
+
+	result := deployer.Deploy(context.Background(), project, "INTERNAL")
+	if !result.Success {
+		t.Fatalf("Deployment failed: %s", result.Error)
+	}
+
+	content, err := os.ReadFile(envFile)
+	if err != nil {
+		t.Fatalf("Failed to read env file: %v", err)
+	}
+
+	if !strings.Contains(string(content), "SDEPLOY_VERSION="+Version) {
+		t.Errorf("Expected SDEPLOY_VERSION=%s to be set, got:\n%s", Version, string(content))
 	}
 }

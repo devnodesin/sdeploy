@@ -178,6 +178,7 @@ SDeploy uses YAML format for configuration.
 | `execute_path`    | string   | No       | `local_path` | Working directory for command execution        |
 | `git_branch`      | string   | No       | `"main"`     | Branch required to trigger deployment          |
 | `execute_command` | string   | Yes      | —            | Shell command to execute                       |
+| `env_variables`   | []string | No       | —            | Optional environment variables for `execute_command` (e.g. `KEY=VALUE`) |
 | `git_update`      | bool     | No       | `false`      | Run `git pull` before deployment               |
 | `git_ssh_key_path`| string   | No       | —            | Path to SSH private key for git operations     |
 | `timeout_seconds` | int      | No       | `0`          | Command timeout (0 = no timeout)               |
@@ -232,7 +233,7 @@ SDeploy supports per-project SSH key authentication for private git repositories
 | Git Operations              | Clone and pull support with configurable branch                          |
 | Custom Trigger Labels       | Use `triggered_by` field to identify deployment sources                  |
 | Deployment Status Logging   | Logs final deployment status to main.log with build log reference        |
-| Environment Variables       | Injects `SDEPLOY_PROJECT_NAME`, `SDEPLOY_TRIGGER_SOURCE`, etc.           |
+| Environment Variables       | Injects `SDEPLOY_VERSION`, `SDEPLOY_PROJECT_NAME`, `SDEPLOY_TRIGGER_SOURCE`, `SDEPLOY_GIT_BRANCH` into every command; project-level `env_variables` are also appended. |
 | Comprehensive Logging       | Logs to stdout/stderr (console) or file (daemon mode)                    |
 | Email Notifications         | Sends deployment summary emails when configured                          |
 | Hot Reload                  | Configuration changes auto-detected and applied without restart          |
@@ -312,6 +313,28 @@ SDeploy supports hot reloading of the configuration file without daemon restart.
 11. **Build Decision Logic:** Determine if build should proceed (see Build Trigger Logic below).
 12. **Execution:** Run `execute_command` in `execute_path` (with timeout, env vars).
 13. **Cleanup:** Log result, log deployment status to main.log, send email notification (if configured), release lock.
+
+## 🌍 Environment Variables
+
+The following environment variables are automatically injected into every `execute_command`:
+
+| Variable                 | Description                                       |
+|--------------------------|---------------------------------------------------|
+| `SDEPLOY_VERSION`        | Current SDeploy version (e.g. `v1.0`)             |
+| `SDEPLOY_PROJECT_NAME`   | Name of the project being deployed                |
+| `SDEPLOY_TRIGGER_SOURCE` | Source that triggered the deployment              |
+| `SDEPLOY_GIT_BRANCH`     | Configured git branch for the project             |
+
+Additional per-project variables can be specified via `env_variables` in the project configuration:
+
+```yaml
+env_variables:
+  - BUILD_DIR=/var/www/frontend/dist
+  - DEPLOY_DIR=/var/www/html/
+  - VITE_API_BASE_URL=https://api.example.com/
+```
+
+> **Note:** Variables in `env_variables` take precedence over inline shell assignments in `execute_command`. Use `env_variables` instead of prefixing `execute_command` with `KEY=VALUE` assignments for reliable behavior.
 
 ## 🎯 Build Trigger Logic
 

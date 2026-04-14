@@ -242,7 +242,7 @@ func (d *Deployer) logBuildConfig(project *ProjectConfig, buildLogger *BuildLogg
 	if project.GitSSHKeyPath != "" {
 		sshKeyStatus = "configured"
 	}
-	buildLogger.Infof(project.Name, "Build config: name=%s, local_path=%s, git_repo=%s, git_branch=%s, git_update=%t, git_ssh_key=%s, execute_path=%s, execute_command=%s",
+	buildLogger.Infof(project.Name, "Build config: name=%s, local_path=%s, git_repo=%s, git_branch=%s, git_update=%t, git_ssh_key=%s, execute_path=%s, execute_command=%s, env_variables=%d",
 		project.Name,
 		project.LocalPath,
 		project.GitRepo,
@@ -251,6 +251,7 @@ func (d *Deployer) logBuildConfig(project *ProjectConfig, buildLogger *BuildLogg
 		sshKeyStatus,
 		project.ExecutePath,
 		project.ExecuteCommand,
+		len(project.EnvVariables),
 	)
 }
 
@@ -634,10 +635,13 @@ func (d *Deployer) executeCommand(ctx context.Context, project *ProjectConfig, t
 
 	// Set environment variables
 	cmd.Env = append(os.Environ(),
+		fmt.Sprintf("SDEPLOY_VERSION=%s", Version),
 		fmt.Sprintf("SDEPLOY_PROJECT_NAME=%s", project.Name),
 		fmt.Sprintf("SDEPLOY_TRIGGER_SOURCE=%s", triggerSource),
 		fmt.Sprintf("SDEPLOY_GIT_BRANCH=%s", project.GitBranch),
 	)
+	// Append project-level env_variables (later values take precedence over duplicates at shell level)
+	cmd.Env = append(cmd.Env, project.EnvVariables...)
 
 	// Capture output
 	var stdout, stderr bytes.Buffer
