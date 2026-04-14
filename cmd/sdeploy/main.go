@@ -177,6 +177,9 @@ func logConfigSummary(logger *Logger, cfg *Config, daemonMode bool) {
 			logger.Infof("", "  - Execute Path: %s", project.ExecutePath)
 		}
 		logger.Infof("", "  - Execute Command: %s", project.ExecuteCommand)
+		if len(project.EnvVariables) > 0 {
+			logger.Infof("", "  - Env Variables: %d configured", len(project.EnvVariables))
+		}
 		if project.TimeoutSeconds > 0 {
 			logger.Infof("", "  - Timeout: %ds", project.TimeoutSeconds)
 		}

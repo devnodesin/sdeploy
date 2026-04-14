@@ -44,6 +44,7 @@ type ProjectConfig struct {
 	ExecutePath     string   `yaml:"execute_path"`
 	GitBranch       string   `yaml:"git_branch"`
 	ExecuteCommand  string   `yaml:"execute_command"`
+	EnvVariables    []string `yaml:"env_variables"`
 	GitUpdate       bool     `yaml:"git_update"`
 	GitSSHKeyPath   string   `yaml:"git_ssh_key_path"`
 	TimeoutSeconds  int      `yaml:"timeout_seconds"`

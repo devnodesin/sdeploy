@@ -623,3 +623,46 @@ projects:
 		t.Errorf("Expected error message about invalid git_branch character, got: %v", err)
 	}
 }
+
+// TestLoadConfigEnvVariables tests that env_variables are parsed from YAML config
+func TestLoadConfigEnvVariables(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "sdeploy.conf")
+
+	configWithEnvVars := `
+listen_port: 8080
+projects:
+  - name: EnvVarProject
+    webhook_path: /hooks/envtest
+    webhook_secret: secret_token_123
+    execute_command: sh build.sh
+    env_variables:
+      - BUILD_DIR=/tmp/mybuild
+      - DEPLOY_DIR=/var/www/html/
+      - VITE_API_BASE_URL=https://api.example.com/
+`
+
+	err := os.WriteFile(configPath, []byte(configWithEnvVars), 0644)
+	if err != nil {
+		t.Fatalf("Failed to create test config file: %v", err)
+	}
+
+	cfg, err := LoadConfig(configPath)
+	if err != nil {
+		t.Fatalf("LoadConfig failed: %v", err)
+	}
+
+	project := cfg.Projects[0]
+	if len(project.EnvVariables) != 3 {
+		t.Errorf("Expected 3 env_variables, got %d", len(project.EnvVariables))
+	}
+	if len(project.EnvVariables) > 0 && project.EnvVariables[0] != "BUILD_DIR=/tmp/mybuild" {
+		t.Errorf("Expected first env_variable to be 'BUILD_DIR=/tmp/mybuild', got '%s'", project.EnvVariables[0])
+	}
+	if len(project.EnvVariables) > 1 && project.EnvVariables[1] != "DEPLOY_DIR=/var/www/html/" {
+		t.Errorf("Expected second env_variable to be 'DEPLOY_DIR=/var/www/html/', got '%s'", project.EnvVariables[1])
+	}
+	if len(project.EnvVariables) > 2 && project.EnvVariables[2] != "VITE_API_BASE_URL=https://api.example.com/" {
+		t.Errorf("Expected third env_variable to be 'VITE_API_BASE_URL=https://api.example.com/', got '%s'", project.EnvVariables[2])
+	}
+}
