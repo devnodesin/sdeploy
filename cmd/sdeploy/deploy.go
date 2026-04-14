@@ -640,7 +640,7 @@ func (d *Deployer) executeCommand(ctx context.Context, project *ProjectConfig, t
 		fmt.Sprintf("SDEPLOY_TRIGGER_SOURCE=%s", triggerSource),
 		fmt.Sprintf("SDEPLOY_GIT_BRANCH=%s", project.GitBranch),
 	)
-	// Append project-level env_variables (these override any previously set values)
+	// Append project-level env_variables (later values take precedence over duplicates at shell level)
 	cmd.Env = append(cmd.Env, project.EnvVariables...)
 
 	// Capture output

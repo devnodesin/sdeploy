@@ -334,7 +334,7 @@ env_variables:
   - VITE_API_BASE_URL=https://api.example.com/
 ```
 
-> **Note:** Variables in `env_variables` take precedence over inline shell assignments in `execute_command`. Use `env_variables` instead of prefixing `execute_command` with `KEY=VALUE` assignments for reliable behaviour.
+> **Note:** Variables in `env_variables` take precedence over inline shell assignments in `execute_command`. Use `env_variables` instead of prefixing `execute_command` with `KEY=VALUE` assignments for reliable behavior.
 
 ## 🎯 Build Trigger Logic
 
