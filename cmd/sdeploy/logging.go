@@ -83,8 +83,9 @@ func NewLogger(writer io.Writer, logPath string, daemonMode bool) *Logger {
 	}
 
 	// Open main.log file for service logs (always, regardless of mode)
+	// Truncate on each start/restart so it contains only current session logs
 	mainLogPath := filepath.Join(l.logPath, "main.log")
-	file, err := os.OpenFile(mainLogPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	file, err := os.OpenFile(mainLogPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
 	if err != nil {
 		reportLogFileError("open/create file", mainLogPath, err, "0644")
 		l.writer = os.Stderr

@@ -13,6 +13,77 @@ import (
 	"time"
 )
 
+func findBuildLogPath(t *testing.T, dir, prefix, suffix string) string {
+	t.Helper()
+
+	buildLogPath, ok := tryFindBuildLogPath(dir, prefix, suffix)
+	if !ok {
+		t.Fatal("Expected exactly one matching build log file")
+	}
+
+	return buildLogPath
+}
+
+func tryFindBuildLogPath(dir, prefix, suffix string) (string, bool) {
+	files, err := os.ReadDir(dir)
+	if err != nil {
+		return "", false
+	}
+
+	var buildLogPath string
+	matchingBuildLogs := 0
+	for _, f := range files {
+		if strings.HasPrefix(f.Name(), prefix) && strings.HasSuffix(f.Name(), suffix) {
+			matchingBuildLogs++
+			buildLogPath = filepath.Join(dir, f.Name())
+		}
+	}
+
+	return buildLogPath, matchingBuildLogs == 1
+}
+
+func TestTryFindBuildLogPath(t *testing.T) {
+	t.Run("single match", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		expectedPath := filepath.Join(tmpDir, "project-2026-05-10-0400-success.log")
+		if err := os.WriteFile(expectedPath, []byte("ok"), 0644); err != nil {
+			t.Fatalf("Failed to create test log file: %v", err)
+		}
+
+		path, ok := tryFindBuildLogPath(tmpDir, "project-", "-success.log")
+		if !ok {
+			t.Fatal("Expected helper to find exactly one matching build log")
+		}
+		if path != expectedPath {
+			t.Fatalf("Expected path %s, got %s", expectedPath, path)
+		}
+	})
+
+	t.Run("multiple matches", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		files := []string{
+			"project-2026-05-10-0400-success.log",
+			"project-2026-05-10-0401-success.log",
+		}
+		for _, name := range files {
+			if err := os.WriteFile(filepath.Join(tmpDir, name), []byte("ok"), 0644); err != nil {
+				t.Fatalf("Failed to create test log file: %v", err)
+			}
+		}
+
+		if _, ok := tryFindBuildLogPath(tmpDir, "project-", "-success.log"); ok {
+			t.Fatal("Expected helper to reject multiple matching build logs")
+		}
+	})
+
+	t.Run("no matches", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		if _, ok := tryFindBuildLogPath(tmpDir, "project-", "-success.log"); ok {
+			t.Fatal("Expected helper to report no matching build logs")
+		}
+	})
+}
+
 // TestDeployLockAcquisition tests that lock is acquired for deployment
 func TestDeployLockAcquisition(t *testing.T) {
 	deployer := NewDeployer(nil)
@@ -25,6 +96,21 @@ func TestDeployLockAcquisition(t *testing.T) {
 	result := deployer.Deploy(context.Background(), project, "WEBHOOK")
 	if !result.Success {
 		t.Errorf("Expected deployment to succeed, got error: %s", result.Error)
+	}
+}
+
+// TestDeployAcceptsNilContext tests that Deploy normalizes nil context safely
+func TestDeployAcceptsNilContext(t *testing.T) {
+	deployer := NewDeployer(nil)
+	project := &ProjectConfig{
+		Name:           "TestProject",
+		WebhookPath:    "/hooks/test",
+		ExecuteCommand: "echo hello",
+	}
+
+	result := deployer.Deploy(nil, project, "WEBHOOK")
+	if !result.Success {
+		t.Errorf("Expected deployment to succeed with nil context, got error: %s", result.Error)
 	}
 }
 
@@ -262,6 +348,47 @@ func TestDeployLockRelease(t *testing.T) {
 	result2 := deployer.Deploy(context.Background(), project, "INTERNAL")
 	if !result2.Success {
 		t.Errorf("Second deployment failed (lock not released?): %s", result2.Error)
+	}
+}
+
+// TestDeployLogsPayloadToBuildLog tests that payload logs go to build logs, not main.log
+func TestDeployLogsPayloadToBuildLog(t *testing.T) {
+	tmpDir := t.TempDir()
+	logger := NewLogger(nil, tmpDir, true)
+	defer logger.Close()
+
+	deployer := NewDeployer(logger)
+	project := &ProjectConfig{
+		Name:           "payload-project",
+		WebhookPath:    "/hooks/payload",
+		ExecutePath:    tmpDir,
+		ExecuteCommand: "echo deployed",
+	}
+
+	payload := `{"ref":"refs/heads/live"}`
+	ctx := WithWebhookPayload(context.Background(), []byte(payload))
+	result := deployer.Deploy(ctx, project, "WEBHOOK (Github)")
+	if !result.Success {
+		t.Fatalf("Expected deployment to succeed, got error: %s", result.Error)
+	}
+
+	mainLogPath := filepath.Join(tmpDir, "main.log")
+	mainContent, err := os.ReadFile(mainLogPath)
+	if err != nil {
+		t.Fatalf("Failed to read main.log: %v", err)
+	}
+	if strings.Contains(string(mainContent), "Payload: "+payload) {
+		t.Error("Expected payload to not be logged in main.log")
+	}
+
+	buildLogPath := findBuildLogPath(t, tmpDir, "payload-project-", "-success.log")
+
+	buildContent, err := os.ReadFile(buildLogPath)
+	if err != nil {
+		t.Fatalf("Failed to read build log file: %v", err)
+	}
+	if !strings.Contains(string(buildContent), "Payload: "+payload) {
+		t.Error("Expected payload to be logged in build-specific log file")
 	}
 }
 

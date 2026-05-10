@@ -7,8 +7,16 @@ import (
 	"encoding/hex"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+	"time"
+)
+
+const (
+	webhookDeploymentWaitTimeout = 2 * time.Second
+	webhookDeploymentPollInterval = 10 * time.Millisecond
 )
 
 // TestWebhookRouting tests routing requests by webhook_path to correct project
@@ -275,6 +283,74 @@ func TestWebhookTriggerSource(t *testing.T) {
 
 	if !strings.Contains(buf.String(), "INTERNAL") {
 		t.Log("Log output:", buf.String())
+	}
+}
+
+// TestWebhookDoesNotLogPayloadToServiceLog tests payload is not written to service log
+func TestWebhookDoesNotLogPayloadToServiceLog(t *testing.T) {
+	tmpDir := t.TempDir()
+	cfg := &Config{
+		Projects: []ProjectConfig{
+			{
+				Name:           "TestProject",
+				WebhookPath:    "/hooks/test",
+				WebhookSecret:  "mysecret",
+				GitBranch:      "main",
+				ExecutePath:    tmpDir,
+				ExecuteCommand: "echo test",
+			},
+		},
+	}
+
+	logger := NewLogger(nil, tmpDir, true)
+	defer logger.Close()
+	deployer := NewDeployer(logger)
+	handler := NewWebhookHandler(cfg, logger)
+	handler.SetDeployer(deployer)
+
+	payload := `{"ref":"refs/heads/main"}`
+	req := httptest.NewRequest("POST", "/hooks/test?secret=mysecret", strings.NewReader(payload))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusAccepted {
+		t.Fatalf("Expected status 202, got %d", rr.Code)
+	}
+
+	mainLogPath := filepath.Join(tmpDir, "main.log")
+	var buildLogPath string
+	deadline := time.Now().Add(webhookDeploymentWaitTimeout)
+	for time.Now().Before(deadline) {
+		mainContent, err := os.ReadFile(mainLogPath)
+		if err == nil && strings.Contains(string(mainContent), "Deployment successful") {
+			if path, ok := tryFindBuildLogPath(tmpDir, "TestProject-", "-success.log"); ok {
+				buildLogPath = path
+				break
+			}
+		}
+		time.Sleep(webhookDeploymentPollInterval)
+	}
+
+	mainContent, err := os.ReadFile(mainLogPath)
+	if err != nil {
+		t.Fatalf("Failed to read main.log: %v", err)
+	}
+	if strings.Contains(string(mainContent), "Payload: "+payload) {
+		t.Errorf("Expected payload to not be logged in service log, got: %s", string(mainContent))
+	}
+
+	if buildLogPath == "" {
+		t.Fatal("Expected build log file not found")
+	}
+
+	buildContent, err := os.ReadFile(buildLogPath)
+	if err != nil {
+		t.Fatalf("Failed to read build log: %v", err)
+	}
+	if !strings.Contains(string(buildContent), "Payload: "+payload) {
+		t.Errorf("Expected payload to be logged in build log, got: %s", string(buildContent))
 	}
 }
 

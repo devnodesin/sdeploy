@@ -30,6 +30,35 @@ func TestServiceLoggerMainFile(t *testing.T) {
 	}
 }
 
+// TestServiceLoggerClearsMainLogOnStart tests that main.log is truncated on startup
+func TestServiceLoggerClearsMainLogOnStart(t *testing.T) {
+	tmpDir := t.TempDir()
+	mainLogPath := filepath.Join(tmpDir, "main.log")
+
+	// Simulate previous session content
+	if err := os.WriteFile(mainLogPath, []byte("old session log\n"), 0644); err != nil {
+		t.Fatalf("Failed to seed main.log: %v", err)
+	}
+
+	logger := NewLogger(nil, tmpDir, true)
+	defer logger.Close()
+
+	logger.Info("", "new session log")
+
+	content, err := os.ReadFile(mainLogPath)
+	if err != nil {
+		t.Fatalf("Failed to read main.log: %v", err)
+	}
+
+	logStr := string(content)
+	if strings.Contains(logStr, "old session log") {
+		t.Error("Expected old main.log content to be cleared on startup")
+	}
+	if !strings.Contains(logStr, "new session log") {
+		t.Error("Expected new main.log content after startup")
+	}
+}
+
 // TestBuildLoggerFileNaming tests that build log files are named correctly
 func TestBuildLoggerFileNaming(t *testing.T) {
 	tmpDir := t.TempDir()

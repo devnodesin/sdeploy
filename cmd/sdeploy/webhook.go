@@ -128,8 +128,6 @@ func (h *WebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Log the webhook receipt
 	if h.logger != nil {
 		h.logger.Infof(project.Name, "Received %s trigger for branch: %s", enhancedTriggerSource, branch)
-		//print the full payload
-		h.logger.Infof(project.Name, "Payload: %s", string(body))
 	}
 
 	// Check branch match (for WEBHOOK triggers, we validate branch)
@@ -147,7 +145,7 @@ func (h *WebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if h.deployer != nil {
 			// Use a background context since HTTP request context is canceled after response
 			// Deploy already logs start/completion/failure, so no extra logging needed here
-			h.deployer.Deploy(context.Background(), project, enhancedTriggerSource)
+			h.deployer.Deploy(WithWebhookPayload(context.Background(), body), project, enhancedTriggerSource)
 		}
 	}()
 

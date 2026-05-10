@@ -144,11 +144,13 @@ SDeploy uses YAML format for configuration.
 
 **Logging Details:**
 - **Service logs**: Always written to `{log_path}/main.log` regardless of mode
+  - `main.log` is truncated on every service start/restart so it contains only the current session
   - In **console mode** (foreground): logs written to both `{log_path}/main.log` and `stderr` for real-time visibility
   - In **daemon mode** (background): logs written only to `{log_path}/main.log`
 - **Build logs**: Written to `{log_path}/{project_name}-{yyyy-mm-dd}-{HHMM}-{success|fail}.log`
 - All logs are timestamped and include severity level (INFO, WARN, ERROR)
 - Build logs are created per deployment and include only that build's output
+- Full webhook payload entries (e.g., `Payload: {"ref":"refs/heads/live"}`) are written to build logs, not `main.log`
 - Build logs always go to files in both console and daemon modes
 - **Deployment status**: Final deployment status (success/failure) is logged to main.log with reference to build log path
 
@@ -303,7 +305,7 @@ SDeploy supports hot reloading of the configuration file without daemon restart.
 4. **Validation (Logic):** Verify git branch matches configured branch.
 5. **Lock Check:** If deployment lock held, log "Skipped" and return `202`. Otherwise, acquire lock.
 6. **Asynchronous Trigger:** Start deployment in background, return `202 Accepted`.
-7. **Log Project Config:** Print project configuration for this build.
+7. **Build Log Context:** Log project configuration for every deployment in the build-specific log; for webhook-triggered deployments, also log the webhook payload (if present).
 8. **Pre-flight Checks:** Verify/create `local_path` and `execute_path` directories.
 9. **Branch Verification:** Ensure repository is on configured branch, checkout if needed.
 10. **Git Operations:**
@@ -499,4 +501,3 @@ For webhooks with HMAC signatures, SDeploy automatically detects GitHub sources:
 1. **Custom `triggered_by` field** (highest priority) - Use this for custom labels
 2. **GitHub sender URL** - Automatic detection via `sender.url` field
 3. **Unknown** - Default when no identifiable source is found
-
