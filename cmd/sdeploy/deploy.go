@@ -29,7 +29,10 @@ const webhookPayloadContextKey contextKey = "webhook_payload"
 
 // WithWebhookPayload stores webhook payload in context for build-log-only payload logging
 func WithWebhookPayload(ctx context.Context, payload []byte) context.Context {
-	if ctx == nil || len(payload) == 0 {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if len(payload) == 0 {
 		return ctx
 	}
 	return context.WithValue(ctx, webhookPayloadContextKey, string(payload))

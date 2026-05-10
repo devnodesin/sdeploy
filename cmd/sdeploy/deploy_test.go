@@ -301,14 +301,18 @@ func TestDeployLogsPayloadToBuildLogOnly(t *testing.T) {
 	}
 
 	var buildLogPath string
+	matchingBuildLogs := 0
 	for _, f := range files {
 		if strings.HasPrefix(f.Name(), "payload-project-") && strings.HasSuffix(f.Name(), "-success.log") {
+			matchingBuildLogs++
 			buildLogPath = filepath.Join(tmpDir, f.Name())
-			break
 		}
 	}
 	if buildLogPath == "" {
 		t.Fatal("Expected build log file not found")
+	}
+	if matchingBuildLogs != 1 {
+		t.Fatalf("Expected exactly one matching build log file, found %d", matchingBuildLogs)
 	}
 
 	buildContent, err := os.ReadFile(buildLogPath)
