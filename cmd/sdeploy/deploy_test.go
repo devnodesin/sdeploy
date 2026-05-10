@@ -324,6 +324,35 @@ func TestDeployLogsPayloadToBuildLogOnly(t *testing.T) {
 	}
 }
 
+// TestWithWebhookPayloadStoresPayload tests payload helper round-trip behavior
+func TestWithWebhookPayloadStoresPayload(t *testing.T) {
+	baseCtx := context.Background()
+	payload := []byte(`{"ref":"refs/heads/main"}`)
+
+	ctx := WithWebhookPayload(baseCtx, payload)
+
+	if got := webhookPayloadFromContext(ctx); got != string(payload) {
+		t.Fatalf("Expected payload %q, got %q", string(payload), got)
+	}
+}
+
+// TestWithWebhookPayloadAllowsEmptyPayload tests empty payload handling remains consistent
+func TestWithWebhookPayloadAllowsEmptyPayload(t *testing.T) {
+	baseCtx := context.Background()
+
+	ctx := WithWebhookPayload(baseCtx, nil)
+
+	if ctx == nil {
+		t.Fatal("Expected derived context, got nil")
+	}
+	if ctx == baseCtx {
+		t.Fatal("Expected empty payload to still create a derived context")
+	}
+	if got := webhookPayloadFromContext(ctx); got != "" {
+		t.Fatalf("Expected empty payload, got %q", got)
+	}
+}
+
 // TestDeployResult tests DeployResult structure
 func TestDeployResult(t *testing.T) {
 	result := DeployResult{

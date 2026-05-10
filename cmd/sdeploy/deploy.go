@@ -27,14 +27,9 @@ type contextKey string
 
 const webhookPayloadKey contextKey = "webhook_payload"
 
-// WithWebhookPayload stores webhook payload in context for build-log-only payload logging
+// WithWebhookPayload stores webhook payload in context for build-log-only payload logging.
+// Callers must provide a non-nil context.
 func WithWebhookPayload(ctx context.Context, payload []byte) context.Context {
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	if len(payload) == 0 {
-		return ctx
-	}
 	return context.WithValue(ctx, webhookPayloadKey, string(payload))
 }
 
