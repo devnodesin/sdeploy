@@ -42,6 +42,48 @@ func tryFindBuildLogPath(dir, prefix, suffix string) (string, bool) {
 	return buildLogPath, matchingBuildLogs == 1
 }
 
+func TestTryFindBuildLogPath(t *testing.T) {
+	t.Run("single match", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		expectedPath := filepath.Join(tmpDir, "project-2026-05-10-0400-success.log")
+		if err := os.WriteFile(expectedPath, []byte("ok"), 0644); err != nil {
+			t.Fatalf("Failed to create test log file: %v", err)
+		}
+
+		path, ok := tryFindBuildLogPath(tmpDir, "project-", "-success.log")
+		if !ok {
+			t.Fatal("Expected helper to find exactly one matching build log")
+		}
+		if path != expectedPath {
+			t.Fatalf("Expected path %s, got %s", expectedPath, path)
+		}
+	})
+
+	t.Run("multiple matches", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		files := []string{
+			"project-2026-05-10-0400-success.log",
+			"project-2026-05-10-0401-success.log",
+		}
+		for _, name := range files {
+			if err := os.WriteFile(filepath.Join(tmpDir, name), []byte("ok"), 0644); err != nil {
+				t.Fatalf("Failed to create test log file: %v", err)
+			}
+		}
+
+		if _, ok := tryFindBuildLogPath(tmpDir, "project-", "-success.log"); ok {
+			t.Fatal("Expected helper to reject multiple matching build logs")
+		}
+	})
+
+	t.Run("no matches", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		if _, ok := tryFindBuildLogPath(tmpDir, "project-", "-success.log"); ok {
+			t.Fatal("Expected helper to report no matching build logs")
+		}
+	})
+}
+
 // TestDeployLockAcquisition tests that lock is acquired for deployment
 func TestDeployLockAcquisition(t *testing.T) {
 	deployer := NewDeployer(nil)
