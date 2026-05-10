@@ -34,9 +34,6 @@ func WithWebhookPayload(ctx context.Context, payload []byte) context.Context {
 }
 
 func webhookPayloadFromContext(ctx context.Context) string {
-	if ctx == nil {
-		return ""
-	}
 	if payload, ok := ctx.Value(webhookPayloadKey).(string); ok {
 		return payload
 	}
@@ -97,6 +94,10 @@ func (d *Deployer) HasActiveBuilds() bool {
 
 // Deploy executes a deployment for the given project
 func (d *Deployer) Deploy(ctx context.Context, project *ProjectConfig, triggerSource string) DeployResult {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
 	result := DeployResult{
 		StartTime: time.Now(),
 	}

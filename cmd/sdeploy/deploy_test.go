@@ -28,6 +28,21 @@ func TestDeployLockAcquisition(t *testing.T) {
 	}
 }
 
+// TestDeployAcceptsNilContext tests that Deploy normalizes nil context safely
+func TestDeployAcceptsNilContext(t *testing.T) {
+	deployer := NewDeployer(nil)
+	project := &ProjectConfig{
+		Name:           "TestProject",
+		WebhookPath:    "/hooks/test",
+		ExecuteCommand: "echo hello",
+	}
+
+	result := deployer.Deploy(nil, project, "WEBHOOK")
+	if !result.Success {
+		t.Errorf("Expected deployment to succeed with nil context, got error: %s", result.Error)
+	}
+}
+
 // TestDeploySkipOnBusy tests that concurrent deployments are skipped
 func TestDeploySkipOnBusy(t *testing.T) {
 	var buf bytes.Buffer
