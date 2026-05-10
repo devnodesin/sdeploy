@@ -33,6 +33,7 @@ func WithWebhookPayload(ctx context.Context, payload []byte) context.Context {
 	return context.WithValue(ctx, webhookPayloadKey, string(payload))
 }
 
+// webhookPayloadFromContext retrieves webhook payload from context, if present.
 func webhookPayloadFromContext(ctx context.Context) string {
 	if payload, ok := ctx.Value(webhookPayloadKey).(string); ok {
 		return payload

@@ -14,6 +14,11 @@ import (
 	"time"
 )
 
+const (
+	webhookDeploymentWaitTimeout = 2 * time.Second
+	webhookDeploymentPollInterval = 10 * time.Millisecond
+)
+
 // TestWebhookRouting tests routing requests by webhook_path to correct project
 func TestWebhookRouting(t *testing.T) {
 	cfg := &Config{
@@ -316,7 +321,7 @@ func TestWebhookDoesNotLogPayloadToServiceLog(t *testing.T) {
 
 	mainLogPath := filepath.Join(tmpDir, "main.log")
 	var buildLogPath string
-	deadline := time.Now().Add(2 * time.Second)
+	deadline := time.Now().Add(webhookDeploymentWaitTimeout)
 	for time.Now().Before(deadline) {
 		mainContent, err := os.ReadFile(mainLogPath)
 		if err == nil && strings.Contains(string(mainContent), "Deployment successful") {
@@ -333,7 +338,7 @@ func TestWebhookDoesNotLogPayloadToServiceLog(t *testing.T) {
 				break
 			}
 		}
-		time.Sleep(10 * time.Millisecond)
+		time.Sleep(webhookDeploymentPollInterval)
 	}
 
 	mainContent, err := os.ReadFile(mainLogPath)
