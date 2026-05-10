@@ -333,7 +333,7 @@ func TestWebhookDoesNotLogPayloadToServiceLog(t *testing.T) {
 				break
 			}
 		}
-		time.Sleep(20 * time.Millisecond)
+		time.Sleep(10 * time.Millisecond)
 	}
 
 	mainContent, err := os.ReadFile(mainLogPath)

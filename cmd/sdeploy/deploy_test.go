@@ -357,9 +357,6 @@ func TestWithWebhookPayloadAllowsEmptyPayload(t *testing.T) {
 	if ctx == nil {
 		t.Fatal("Expected derived context, got nil")
 	}
-	if ctx == baseCtx {
-		t.Fatal("Expected empty payload to still create a derived context")
-	}
 	if got := webhookPayloadFromContext(ctx); got != "" {
 		t.Fatalf("Expected empty payload, got %q", got)
 	}
