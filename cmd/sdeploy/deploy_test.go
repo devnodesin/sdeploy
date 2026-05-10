@@ -280,8 +280,8 @@ func TestDeployLockRelease(t *testing.T) {
 	}
 }
 
-// TestDeployLogsPayloadToBuildLogOnly tests that payload logs go to build logs, not main.log
-func TestDeployLogsPayloadToBuildLogOnly(t *testing.T) {
+// TestDeployLogsPayloadToBuildLog tests that payload logs go to build logs, not main.log
+func TestDeployLogsPayloadToBuildLog(t *testing.T) {
 	tmpDir := t.TempDir()
 	logger := NewLogger(nil, tmpDir, true)
 	defer logger.Close()
@@ -322,9 +322,6 @@ func TestDeployLogsPayloadToBuildLogOnly(t *testing.T) {
 			matchingBuildLogs++
 			buildLogPath = filepath.Join(tmpDir, f.Name())
 		}
-	}
-	if buildLogPath == "" {
-		t.Fatal("Expected build log file not found")
 	}
 	if matchingBuildLogs != 1 {
 		t.Fatalf("Expected exactly one matching build log file, found %d", matchingBuildLogs)

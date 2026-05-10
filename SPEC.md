@@ -305,7 +305,7 @@ SDeploy supports hot reloading of the configuration file without daemon restart.
 4. **Validation (Logic):** Verify git branch matches configured branch.
 5. **Lock Check:** If deployment lock held, log "Skipped" and return `202`. Otherwise, acquire lock.
 6. **Asynchronous Trigger:** Start deployment in background, return `202 Accepted`.
-7. **Build Log Context:** Log webhook payload (if present) and project configuration in the build-specific log.
+7. **Build Log Context:** For webhook-triggered deployments, log the webhook payload (if present) and project configuration in the build-specific log.
 8. **Pre-flight Checks:** Verify/create `local_path` and `execute_path` directories.
 9. **Branch Verification:** Ensure repository is on configured branch, checkout if needed.
 10. **Git Operations:**
