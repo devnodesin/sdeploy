@@ -265,6 +265,61 @@ func TestDeployLockRelease(t *testing.T) {
 	}
 }
 
+// TestDeployLogsPayloadToBuildLogOnly tests that payload logs go to build logs, not main.log
+func TestDeployLogsPayloadToBuildLogOnly(t *testing.T) {
+	tmpDir := t.TempDir()
+	logger := NewLogger(nil, tmpDir, true)
+	defer logger.Close()
+
+	deployer := NewDeployer(logger)
+	project := &ProjectConfig{
+		Name:           "payload-project",
+		WebhookPath:    "/hooks/payload",
+		ExecutePath:    tmpDir,
+		ExecuteCommand: "echo deployed",
+	}
+
+	payload := `{"ref":"refs/heads/live"}`
+	ctx := WithWebhookPayload(context.Background(), []byte(payload))
+	result := deployer.Deploy(ctx, project, "WEBHOOK (Github)")
+	if !result.Success {
+		t.Fatalf("Expected deployment to succeed, got error: %s", result.Error)
+	}
+
+	mainLogPath := filepath.Join(tmpDir, "main.log")
+	mainContent, err := os.ReadFile(mainLogPath)
+	if err != nil {
+		t.Fatalf("Failed to read main.log: %v", err)
+	}
+	if strings.Contains(string(mainContent), "Payload: "+payload) {
+		t.Error("Expected payload to not be logged in main.log")
+	}
+
+	files, err := os.ReadDir(tmpDir)
+	if err != nil {
+		t.Fatalf("Failed to read log directory: %v", err)
+	}
+
+	var buildLogPath string
+	for _, f := range files {
+		if strings.HasPrefix(f.Name(), "payload-project-") && strings.HasSuffix(f.Name(), "-success.log") {
+			buildLogPath = filepath.Join(tmpDir, f.Name())
+			break
+		}
+	}
+	if buildLogPath == "" {
+		t.Fatal("Expected build log file not found")
+	}
+
+	buildContent, err := os.ReadFile(buildLogPath)
+	if err != nil {
+		t.Fatalf("Failed to read build log file: %v", err)
+	}
+	if !strings.Contains(string(buildContent), "Payload: "+payload) {
+		t.Error("Expected payload to be logged in build-specific log file")
+	}
+}
+
 // TestDeployResult tests DeployResult structure
 func TestDeployResult(t *testing.T) {
 	result := DeployResult{

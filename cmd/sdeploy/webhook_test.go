@@ -278,6 +278,39 @@ func TestWebhookTriggerSource(t *testing.T) {
 	}
 }
 
+// TestWebhookDoesNotLogPayloadToServiceLog tests payload is not written to service log
+func TestWebhookDoesNotLogPayloadToServiceLog(t *testing.T) {
+	cfg := &Config{
+		Projects: []ProjectConfig{
+			{
+				Name:           "TestProject",
+				WebhookPath:    "/hooks/test",
+				WebhookSecret:  "mysecret",
+				GitBranch:      "main",
+				ExecuteCommand: "echo test",
+			},
+		},
+	}
+
+	var buf bytes.Buffer
+	logger := NewLogger(&buf, "", false)
+	handler := NewWebhookHandler(cfg, logger)
+
+	payload := `{"ref":"refs/heads/main"}`
+	req := httptest.NewRequest("POST", "/hooks/test?secret=mysecret", strings.NewReader(payload))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusAccepted {
+		t.Fatalf("Expected status 202, got %d", rr.Code)
+	}
+	if strings.Contains(buf.String(), "Payload: "+payload) {
+		t.Errorf("Expected payload to not be logged in service log, got: %s", buf.String())
+	}
+}
+
 // TestWebhookBranchValidation tests branch verification
 func TestWebhookBranchValidation(t *testing.T) {
 	cfg := &Config{

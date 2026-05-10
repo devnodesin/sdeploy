@@ -23,6 +23,28 @@ type DeployResult struct {
 	EndTime   time.Time
 }
 
+type contextKey string
+
+const webhookPayloadContextKey contextKey = "webhook_payload"
+
+// WithWebhookPayload stores webhook payload in context for build-log-only payload logging
+func WithWebhookPayload(ctx context.Context, payload []byte) context.Context {
+	if ctx == nil || len(payload) == 0 {
+		return ctx
+	}
+	return context.WithValue(ctx, webhookPayloadContextKey, string(payload))
+}
+
+func getWebhookPayloadFromContext(ctx context.Context) string {
+	if ctx == nil {
+		return ""
+	}
+	if payload, ok := ctx.Value(webhookPayloadContextKey).(string); ok {
+		return payload
+	}
+	return ""
+}
+
 // Duration returns the deployment duration
 func (r *DeployResult) Duration() time.Duration {
 	return r.EndTime.Sub(r.StartTime)
@@ -139,6 +161,9 @@ func (d *Deployer) Deploy(ctx context.Context, project *ProjectConfig, triggerSo
 	}
 	if buildLogger != nil {
 		buildLogger.Infof(project.Name, "Starting deployment (trigger: %s)", triggerSource)
+		if payload := getWebhookPayloadFromContext(ctx); payload != "" {
+			buildLogger.Infof(project.Name, "Payload: %s", payload)
+		}
 	}
 
 	// Log build config
