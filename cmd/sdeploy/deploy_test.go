@@ -13,6 +13,35 @@ import (
 	"time"
 )
 
+func findBuildLogPath(t *testing.T, dir, prefix, suffix string) string {
+	t.Helper()
+
+	buildLogPath, ok := tryFindBuildLogPath(dir, prefix, suffix)
+	if !ok {
+		t.Fatal("Expected exactly one matching build log file")
+	}
+
+	return buildLogPath
+}
+
+func tryFindBuildLogPath(dir, prefix, suffix string) (string, bool) {
+	files, err := os.ReadDir(dir)
+	if err != nil {
+		return "", false
+	}
+
+	var buildLogPath string
+	matchingBuildLogs := 0
+	for _, f := range files {
+		if strings.HasPrefix(f.Name(), prefix) && strings.HasSuffix(f.Name(), suffix) {
+			matchingBuildLogs++
+			buildLogPath = filepath.Join(dir, f.Name())
+		}
+	}
+
+	return buildLogPath, matchingBuildLogs == 1
+}
+
 // TestDeployLockAcquisition tests that lock is acquired for deployment
 func TestDeployLockAcquisition(t *testing.T) {
 	deployer := NewDeployer(nil)
@@ -310,22 +339,7 @@ func TestDeployLogsPayloadToBuildLog(t *testing.T) {
 		t.Error("Expected payload to not be logged in main.log")
 	}
 
-	files, err := os.ReadDir(tmpDir)
-	if err != nil {
-		t.Fatalf("Failed to read log directory: %v", err)
-	}
-
-	var buildLogPath string
-	matchingBuildLogs := 0
-	for _, f := range files {
-		if strings.HasPrefix(f.Name(), "payload-project-") && strings.HasSuffix(f.Name(), "-success.log") {
-			matchingBuildLogs++
-			buildLogPath = filepath.Join(tmpDir, f.Name())
-		}
-	}
-	if matchingBuildLogs != 1 {
-		t.Fatalf("Expected exactly one matching build log file, found %d", matchingBuildLogs)
-	}
+	buildLogPath := findBuildLogPath(t, tmpDir, "payload-project-", "-success.log")
 
 	buildContent, err := os.ReadFile(buildLogPath)
 	if err != nil {

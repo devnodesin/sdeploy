@@ -325,16 +325,8 @@ func TestWebhookDoesNotLogPayloadToServiceLog(t *testing.T) {
 	for time.Now().Before(deadline) {
 		mainContent, err := os.ReadFile(mainLogPath)
 		if err == nil && strings.Contains(string(mainContent), "Deployment successful") {
-			files, readErr := os.ReadDir(tmpDir)
-			if readErr == nil {
-				for _, f := range files {
-					if strings.HasPrefix(f.Name(), "TestProject-") && strings.HasSuffix(f.Name(), "-success.log") {
-						buildLogPath = filepath.Join(tmpDir, f.Name())
-						break
-					}
-				}
-			}
-			if buildLogPath != "" {
+			if path, ok := tryFindBuildLogPath(tmpDir, "TestProject-", "-success.log"); ok {
+				buildLogPath = path
 				break
 			}
 		}

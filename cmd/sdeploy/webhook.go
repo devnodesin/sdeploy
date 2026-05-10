@@ -145,8 +145,7 @@ func (h *WebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if h.deployer != nil {
 			// Use a background context since HTTP request context is canceled after response
 			// Deploy already logs start/completion/failure, so no extra logging needed here
-			deployCtx := WithWebhookPayload(context.Background(), body)
-			h.deployer.Deploy(deployCtx, project, enhancedTriggerSource)
+			h.deployer.Deploy(WithWebhookPayload(context.Background(), body), project, enhancedTriggerSource)
 		}
 	}()
 
