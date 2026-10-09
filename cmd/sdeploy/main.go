@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 )
 
 const (
@@ -15,7 +16,9 @@ const (
 
 func main() {
 	// Parse command line flags
-	configPath := flag.String("c", "", "Path to config file")
+	// -c accepts a single path or a comma-separated list of config files.
+	// When omitted, the default search order is used (/etc/sdeploy.conf, ./sdeploy.conf).
+	configPathList := flag.String("c", "", "Comma-separated list of config files (YAML). Later files override earlier. Falls back to /etc/sdeploy.conf, ./sdeploy.conf when empty.")
 	daemonMode := flag.Bool("d", false, "Run as daemon (background service)")
 	showHelp := flag.Bool("h", false, "Show help")
 	flag.Parse()
@@ -29,19 +32,40 @@ func main() {
 		os.Exit(0)
 	}
 
-	// Find config file
-	cfgPath := FindConfigFile(*configPath)
-	if cfgPath == "" {
-		fmt.Fprintln(os.Stderr, "Error: No config file found")
-		fmt.Fprintln(os.Stderr, "Searched: -c flag, /etc/sdeploy.conf, ./sdeploy.conf")
-		os.Exit(1)
-	}
+	// Load configuration.
+	// If -c is provided, load and merge the listed config files (later override
+	// earlier). Otherwise fall back to the default single-file search order so
+	// existing deployments are unaffected.
+	var cfg *Config
+	var configPaths []string
+	var err error
 
-	// Load configuration using ConfigManager for hot reload support
-	cfg, err := LoadConfig(cfgPath)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error loading config: %v\n", err)
-		os.Exit(1)
+	if strings.TrimSpace(*configPathList) != "" {
+		// Trim whitespace and drop empties so a `-c "a, b"` list never yields
+		// padded paths that fail to load or watch.
+		for _, p := range strings.Split(*configPathList, ",") {
+			if p = strings.TrimSpace(p); p != "" {
+				configPaths = append(configPaths, p)
+			}
+		}
+		cfg, err = LoadMergedConfig(configPaths)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error loading config: %v\n", err)
+			os.Exit(1)
+		}
+	} else {
+		cfgPath := FindConfigFile("")
+		if cfgPath == "" {
+			fmt.Fprintln(os.Stderr, "Error: No config file found")
+			fmt.Fprintln(os.Stderr, "Searched: /etc/sdeploy.conf, ./sdeploy.conf")
+			os.Exit(1)
+		}
+		cfg, err = LoadConfig(cfgPath)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error loading config: %v\n", err)
+			os.Exit(1)
+		}
+		configPaths = []string{cfgPath}
 	}
 
 	// Initialize logger
@@ -62,7 +86,7 @@ func main() {
 	logConfigSummary(logger, cfg, *daemonMode)
 
 	// Create ConfigManager for hot reload
-	configManager, err := NewConfigManager(cfgPath, logger)
+	configManager, err := NewConfigManager(configPaths, logger)
 	if err != nil {
 		logger.Errorf("", "Failed to create config manager: %v", err)
 		os.Exit(1)
@@ -137,12 +161,12 @@ func main() {
 func logConfigSummary(logger *Logger, cfg *Config, daemonMode bool) {
 	logger.Info("", "Configuration loaded:")
 	logger.Infof("", "  Listen Port: %d", cfg.ListenPort)
-	
+
 	logPath := cfg.LogPath
 	if logPath == "" {
 		logPath = Defaults.LogPath
 	}
-	
+
 	if daemonMode {
 		logger.Infof("", "  Log Directory: %s", logPath)
 		logger.Infof("", "  Service Log: %s/main.log", logPath)
@@ -195,12 +219,14 @@ func printUsage() {
 	fmt.Println("Usage: sdeploy [options]")
 	fmt.Println()
 	fmt.Println("Options:")
-	fmt.Println("  -c <path>  Path to config file (YAML format)")
+	fmt.Println("  -c <list>  Comma-separated list of config files (YAML format)")
+	fmt.Println("             Later files override earlier ones. When empty,")
+	fmt.Println("             searches: /etc/sdeploy.conf, ./sdeploy.conf")
 	fmt.Println("  -d         Run as daemon (background service)")
 	fmt.Println("  -h         Show this help message")
 	fmt.Println()
 	fmt.Println("Config file search order:")
-	fmt.Println("  1. Path from -c flag")
+	fmt.Println("  1. Path(s) from -c flag (comma-separated)")
 	fmt.Println("  2. /etc/sdeploy.conf")
 	fmt.Println("  3. ./sdeploy.conf")
 	fmt.Println()

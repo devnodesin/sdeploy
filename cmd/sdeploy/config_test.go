@@ -8,6 +8,285 @@ import (
 	"testing"
 )
 
+// TestLoadMergedConfigSeparateProjectsInSeparateFiles verifies that projects
+// split across multiple files are appended (not index-merged), matching on
+// webhook_path. This mirrors a real layout where one file holds email_config,
+// another holds some projects, and a third holds additional projects.
+func TestLoadMergedConfigSeparateProjectsInSeparateFiles(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	emailPath := filepath.Join(tmpDir, "email.conf")
+	emailConfig := `
+email_config:
+  smtp_host: smtp.resend.com
+  smtp_port: 2587
+  smtp_user: resend
+  smtp_pass: secret_smtp_pass
+  email_sender: sdeploy@asensar.in
+`
+	if err := os.WriteFile(emailPath, []byte(emailConfig), 0644); err != nil {
+		t.Fatalf("Failed to create email config: %v", err)
+	}
+
+	sitesPath := filepath.Join(tmpDir, "sites.conf")
+	sitesConfig := `
+projects:
+  - name: fd.asensar.in
+    webhook_path: /wh/site-stage-fd-home
+    webhook_secret: StageHome
+    git_repo: git@github.com:asensar/site-fastdep.git
+    git_branch: main
+    git_update: true
+    local_path: /opt/sdeploy/site-stage-fd-home
+    execute_command: sh build.sh
+    email_recipients:
+      - contact@asensar.com
+  - name: fd.asensar.in.info
+    webhook_path: /wh/site-stage-fd-info
+    webhook_secret: StageInfo
+    git_repo: git@github.com:asensar/site-fastdep.git
+    git_branch: main
+    git_update: true
+    local_path: /opt/sdeploy/site-stage-fd-info
+    execute_command: sh build.sh
+    email_recipients:
+      - contact@asensar.com
+`
+	if err := os.WriteFile(sitesPath, []byte(sitesConfig), 0644); err != nil {
+		t.Fatalf("Failed to create sites config: %v", err)
+	}
+
+	extraPath := filepath.Join(tmpDir, "extra.conf")
+	extraConfig := `
+projects:
+  - name: deltaware.in
+    webhook_path: /wh/deltaware-in
+    webhook_secret: DeltawareIN
+    git_repo: git@github.com:asensar/site-deltaware.git
+    git_branch: main
+    git_update: true
+    local_path: /opt/sdeploy/site-live-deltaware-home
+    execute_command: sh build.sh
+`
+	if err := os.WriteFile(extraPath, []byte(extraConfig), 0644); err != nil {
+		t.Fatalf("Failed to create extra config: %v", err)
+	}
+
+	cfg, err := LoadMergedConfig([]string{emailPath, sitesPath, extraPath})
+	if err != nil {
+		t.Fatalf("LoadMergedConfig failed: %v", err)
+	}
+
+	// All three projects should be present (2 from sites + 1 appended from extra).
+	if len(cfg.Projects) != 3 {
+		t.Fatalf("Expected 3 projects, got %d", len(cfg.Projects))
+	}
+
+	// email_config preserved from the first file.
+	if cfg.EmailConfig == nil || cfg.EmailConfig.SMTPHost != "smtp.resend.com" {
+		t.Fatalf("Expected email_config preserved, got %+v", cfg.EmailConfig)
+	}
+
+	// The appended project keeps its own fields, not merged into index 0.
+	delta := cfg.Projects[2]
+	if delta.Name != "deltaware.in" {
+		t.Errorf("Expected appended project name 'deltaware.in', got '%s'", delta.Name)
+	}
+	if delta.GitRepo != "git@github.com:asensar/site-deltaware.git" {
+		t.Errorf("Expected deltaware git_repo, got '%s'", delta.GitRepo)
+	}
+	if delta.WebhookPath != "/wh/deltaware-in" {
+		t.Errorf("Expected deltaware webhook_path, got '%s'", delta.WebhookPath)
+	}
+
+	// Original first project must remain intact (not overwritten by deltaware).
+	first := cfg.Projects[0]
+	if first.Name != "fd.asensar.in" {
+		t.Errorf("Expected first project name 'fd.asensar.in', got '%s'", first.Name)
+	}
+	if first.GitRepo != "git@github.com:asensar/site-fastdep.git" {
+		t.Errorf("Expected first project git_repo preserved, got '%s'", first.GitRepo)
+	}
+	if len(first.EmailRecipients) != 1 || first.EmailRecipients[0] != "contact@asensar.com" {
+		t.Errorf("Expected first project email_recipients preserved, got %v", first.EmailRecipients)
+	}
+}
+
+// TestLoadMergedConfigPatchProjectByWebhookPath verifies that a later file can
+// patch an existing project (same webhook_path) without rewriting the whole list.
+func TestLoadMergedConfigPatchProjectByWebhookPath(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	basePath := filepath.Join(tmpDir, "base.conf")
+	baseConfig := `
+projects:
+  - name: app
+    webhook_path: /wh/app
+    webhook_secret: base_secret
+    git_repo: git@github.com:org/app.git
+    execute_command: sh build.sh
+    email_recipients:
+      - a@example.com
+`
+	if err := os.WriteFile(basePath, []byte(baseConfig), 0644); err != nil {
+		t.Fatalf("Failed to create base config: %v", err)
+	}
+
+	secretPath := filepath.Join(tmpDir, "secret.conf")
+	secretConfig := `
+projects:
+  - webhook_path: /wh/app
+    webhook_secret: overridden_secret
+`
+	if err := os.WriteFile(secretPath, []byte(secretConfig), 0644); err != nil {
+		t.Fatalf("Failed to create secret config: %v", err)
+	}
+
+	cfg, err := LoadMergedConfig([]string{basePath, secretPath})
+	if err != nil {
+		t.Fatalf("LoadMergedConfig failed: %v", err)
+	}
+	if len(cfg.Projects) != 1 {
+		t.Fatalf("Expected 1 project after patch, got %d", len(cfg.Projects))
+	}
+	if cfg.Projects[0].WebhookSecret != "overridden_secret" {
+		t.Errorf("Expected patched webhook_secret, got '%s'", cfg.Projects[0].WebhookSecret)
+	}
+	// Unset fields from the overlay are inherited from the base project.
+	if cfg.Projects[0].GitRepo != "git@github.com:org/app.git" {
+		t.Errorf("Expected inherited git_repo, got '%s'", cfg.Projects[0].GitRepo)
+	}
+	if len(cfg.Projects[0].EmailRecipients) != 1 {
+		t.Errorf("Expected inherited email_recipients, got %v", cfg.Projects[0].EmailRecipients)
+	}
+}
+
+// TestLoadMergedConfigTestsMultipleFiles tests loading and merging multiple config files
+func TestLoadMergedConfigTestsMultipleFiles(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Base config file
+	basePath := filepath.Join(tmpDir, "sdeploy.conf")
+	baseConfig := `
+listen_port: 8080
+log_path: /var/log/sdeploy
+projects:
+  - name: Frontend
+    webhook_path: /hooks/frontend
+    webhook_secret: base_secret
+    execute_command: sh deploy.sh
+`
+	if err := os.WriteFile(basePath, []byte(baseConfig), 0644); err != nil {
+		t.Fatalf("Failed to create base config file: %v", err)
+	}
+
+	// Overlay config file (later overrides earlier). To patch the existing
+	// project, the overlay must include the matching webhook_path.
+	overlayPath := filepath.Join(tmpDir, "secrets.conf")
+	overlayConfig := `
+listen_port: 9090
+projects:
+  - webhook_path: /hooks/frontend
+    webhook_secret: overridden_secret
+`
+	if err := os.WriteFile(overlayPath, []byte(overlayConfig), 0644); err != nil {
+		t.Fatalf("Failed to create overlay config file: %v", err)
+	}
+
+	cfg, err := LoadMergedConfig([]string{basePath, overlayPath})
+	if err != nil {
+		t.Fatalf("LoadMergedConfig failed: %v", err)
+	}
+
+	// listen_port overridden by the second file
+	if cfg.ListenPort != 9090 {
+		t.Errorf("Expected ListenPort 9090 (overridden), got %d", cfg.ListenPort)
+	}
+
+	if len(cfg.Projects) != 1 {
+		t.Fatalf("Expected 1 project, got %d", len(cfg.Projects))
+	}
+
+	// webhook_secret overridden, execute_command inherited from base
+	if cfg.Projects[0].WebhookSecret != "overridden_secret" {
+		t.Errorf("Expected WebhookSecret 'overridden_secret', got '%s'", cfg.Projects[0].WebhookSecret)
+	}
+	if cfg.Projects[0].ExecuteCommand != "sh deploy.sh" {
+		t.Errorf("Expected ExecuteCommand 'sh deploy.sh' (inherited), got '%s'", cfg.Projects[0].ExecuteCommand)
+	}
+}
+
+// TestLoadMergedConfigSkipsMissingFiles tests that missing files are skipped
+func TestLoadMergedConfigSkipsMissingFiles(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	basePath := filepath.Join(tmpDir, "sdeploy.conf")
+	baseConfig := `
+projects:
+  - name: Frontend
+    webhook_path: /hooks/frontend
+    webhook_secret: secret_token_123
+    git_branch: main
+    execute_command: sh deploy.sh
+`
+	if err := os.WriteFile(basePath, []byte(baseConfig), 0644); err != nil {
+		t.Fatalf("Failed to create base config file: %v", err)
+	}
+
+	// A non-existent overlay should be skipped; the base config still loads
+	cfg, err := LoadMergedConfig([]string{basePath, filepath.Join(tmpDir, "missing.conf")})
+	if err != nil {
+		t.Fatalf("LoadMergedConfig failed: %v", err)
+	}
+	if len(cfg.Projects) != 1 {
+		t.Fatalf("Expected 1 project, got %d", len(cfg.Projects))
+	}
+}
+
+// TestLoadMergedConfigSingleFileEquivalent tests that a single file behaves like LoadConfig
+func TestLoadMergedConfigSingleFileEquivalent(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	configPath := filepath.Join(tmpDir, "sdeploy.conf")
+	config := `
+listen_port: 8080
+projects:
+  - name: Frontend
+    webhook_path: /hooks/frontend
+    webhook_secret: secret_token_123
+    git_branch: main
+    execute_command: sh deploy.sh
+`
+	if err := os.WriteFile(configPath, []byte(config), 0644); err != nil {
+		t.Fatalf("Failed to create config file: %v", err)
+	}
+
+	merged, err := LoadMergedConfig([]string{configPath})
+	if err != nil {
+		t.Fatalf("LoadMergedConfig failed: %v", err)
+	}
+
+	single, err := LoadConfig(configPath)
+	if err != nil {
+		t.Fatalf("LoadConfig failed: %v", err)
+	}
+
+	if merged.ListenPort != single.ListenPort {
+		t.Errorf("ListenPort mismatch: merged=%d single=%d", merged.ListenPort, single.ListenPort)
+	}
+	if len(merged.Projects) != len(single.Projects) {
+		t.Errorf("Projects length mismatch: merged=%d single=%d", len(merged.Projects), len(single.Projects))
+	}
+}
+
+// TestLoadMergedConfigNoValidFiles tests error when no valid config is found
+func TestLoadMergedConfigNoValidFiles(t *testing.T) {
+	_, err := LoadMergedConfig([]string{"/nonexistent/a.conf", "/nonexistent/b.conf"})
+	if err == nil {
+		t.Error("Expected error when no valid config files found, got nil")
+	}
+}
+
 // TestLoadConfigValidFile tests loading a valid YAML config file
 func TestLoadConfigValidFile(t *testing.T) {
 	// Create a temporary config file
@@ -564,24 +843,24 @@ func TestValidateGitBranchValid(t *testing.T) {
 // TestValidateGitBranchInvalid tests validateGitBranch with invalid branch names
 func TestValidateGitBranchInvalid(t *testing.T) {
 	invalidBranches := []string{
-		"",                    // empty
-		"branch with spaces",  // spaces
-		"branch;rm -rf /",     // semicolon (command injection attempt)
-		"branch`whoami`",      // backticks (command injection attempt)
-		"branch$(whoami)",     // command substitution
-		"branch&&echo hi",     // shell operators
-		"branch|cat",          // pipe
-		"branch>file",         // redirection
-		"branch<file",         // redirection
-		"branch\necho hi",     // newline
-		"branch\techo hi",     // tab
-		"branch*",             // wildcard
-		"branch?",             // wildcard
-		"branch[",             // bracket
-		"branch]",             // bracket
-		"branch^",             // caret
-		"branch~",             // tilde
-		"branch:",             // colon
+		"",                   // empty
+		"branch with spaces", // spaces
+		"branch;rm -rf /",    // semicolon (command injection attempt)
+		"branch`whoami`",     // backticks (command injection attempt)
+		"branch$(whoami)",    // command substitution
+		"branch&&echo hi",    // shell operators
+		"branch|cat",         // pipe
+		"branch>file",        // redirection
+		"branch<file",        // redirection
+		"branch\necho hi",    // newline
+		"branch\techo hi",    // tab
+		"branch*",            // wildcard
+		"branch?",            // wildcard
+		"branch[",            // bracket
+		"branch]",            // bracket
+		"branch^",            // caret
+		"branch~",            // tilde
+		"branch:",            // colon
 	}
 
 	for _, branch := range invalidBranches {

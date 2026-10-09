@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 )
@@ -71,17 +72,182 @@ func LoadConfig(path string) (*Config, error) {
 		return nil, fmt.Errorf("failed to parse config YAML: %w", err)
 	}
 
-	// Set default listen port if not specified in config
-	if cfg.ListenPort == 0 {
-		cfg.ListenPort = Defaults.Port
-	}
-
-	// Validate the configuration
-	if err := validateConfig(&cfg); err != nil {
+	// Apply defaults and validate, using the shared finalize step so this path
+	// cannot drift from LoadMergedConfig.
+	if err := finalizeConfig(&cfg); err != nil {
 		return nil, err
 	}
 
 	return &cfg, nil
+}
+
+// LoadMergedConfig loads and merges multiple YAML configuration files into a
+// single in-memory Config. Files are processed in the order given; for any
+// mapping key, later files override earlier ones (last-write-wins). Nested maps
+// are merged recursively, while slices and scalar values are replaced wholly.
+//
+// Non-existent or unreadable files are skipped silently so that optional
+// overlays (for example a secrets file) may be absent without breaking startup.
+// An error is returned only when no valid configuration could be loaded at all.
+//
+// When a single path is supplied this behaves equivalently to LoadConfig for
+// the existing single-file workflow.
+func LoadMergedConfig(paths []string) (*Config, error) {
+	merged := make(map[string]interface{})
+
+	for _, p := range paths {
+		p = strings.TrimSpace(p)
+		if p == "" {
+			continue
+		}
+
+		data, err := os.ReadFile(p)
+		if err != nil {
+			// Skip files that don't exist so optional overlays can be omitted.
+			continue
+		}
+
+		var partial map[string]interface{}
+		if err := yaml.Unmarshal(data, &partial); err != nil {
+			return nil, fmt.Errorf("failed to parse config YAML %q: %w", p, err)
+		}
+
+		mergeMaps(merged, partial)
+	}
+
+	if len(merged) == 0 {
+		return nil, fmt.Errorf("no valid configuration files found in: %v", paths)
+	}
+
+	mergedData, err := yaml.Marshal(merged)
+	if err != nil {
+		return nil, fmt.Errorf("failed to merge configuration: %w", err)
+	}
+
+	var cfg Config
+	if err := yaml.Unmarshal(mergedData, &cfg); err != nil {
+		return nil, fmt.Errorf("failed to parse merged config: %w", err)
+	}
+
+	// Apply defaults and validate via the same shared step used by LoadConfig
+	// so the two load paths behave identically for the single-file case.
+	if err := finalizeConfig(&cfg); err != nil {
+		return nil, err
+	}
+
+	return &cfg, nil
+}
+
+// finalizeConfig applies default values and validates a parsed configuration.
+// It is shared by LoadConfig and LoadMergedConfig so the two load paths cannot
+// drift apart (e.g. a new default added in one place but not the other).
+func finalizeConfig(cfg *Config) error {
+	if cfg.ListenPort == 0 {
+		cfg.ListenPort = Defaults.Port
+	}
+	return validateConfig(cfg)
+}
+
+// mergeMaps merges override into base for the top-level mapping. Nested maps are
+// merged recursively (see mergeValue). The `projects` list is handled specially
+// by mergeProjects so that projects can be split across files: a project in the
+// override that shares a webhook_path with an existing project is patched, while
+// a project with a new webhook_path is appended.
+func mergeMaps(base, override map[string]interface{}) {
+	for key, val := range override {
+		switch key {
+		case "projects":
+			base[key] = mergeProjects(base[key], val)
+		default:
+			if baseVal, ok := base[key]; ok {
+				base[key] = mergeValue(baseVal, val)
+			} else {
+				base[key] = val
+			}
+		}
+	}
+}
+
+// mergeProjects merges two `projects` lists. Projects are matched by their
+// `webhook_path` (which is unique per validation). A project in the override
+// with a webhook_path already present is deep-merged (patched) into the base
+// project; a project with a new webhook_path is appended. This allows different
+// files to contribute entirely separate projects while still letting a later
+// file override individual fields of an existing project.
+func mergeProjects(baseVal, overrideVal interface{}) interface{} {
+	baseList, ok1 := baseVal.([]interface{})
+	overrideList, ok2 := overrideVal.([]interface{})
+	if !ok1 || !ok2 {
+		// Not both project lists: fall back to replacing (override wins,
+		// or base is kept if the override is not a list).
+		if ok2 {
+			return overrideVal
+		}
+		return baseVal
+	}
+
+	// Index base projects by webhook_path.
+	byPath := make(map[string]int, len(baseList))
+	merged := make([]interface{}, len(baseList))
+	copy(merged, baseList)
+	for i, p := range baseList {
+		if m, ok := p.(map[string]interface{}); ok {
+			if k, ok := m["webhook_path"].(string); ok && k != "" {
+				byPath[k] = i
+			}
+		}
+	}
+
+	for _, p := range overrideList {
+		m, ok := p.(map[string]interface{})
+		if !ok {
+			merged = append(merged, p)
+			continue
+		}
+		if k, ok := m["webhook_path"].(string); ok {
+			if i, exists := byPath[k]; exists {
+				// Patch existing project (deep merge).
+				merged[i] = mergeValue(merged[i], m)
+				continue
+			}
+		}
+		// Append new project.
+		merged = append(merged, m)
+	}
+
+	return merged
+}
+
+// mergeValue recursively merges two YAML-derived values.
+//   - maps: keys are merged, with nested values merged recursively
+//   - slices (including slices of maps, except `projects` which is routed
+//     through mergeProjects): replaced wholesale by the override
+//   - scalars: the override replaces the base
+func mergeValue(base, override interface{}) interface{} {
+	switch o := override.(type) {
+	case map[string]interface{}:
+		if b, ok := base.(map[string]interface{}); ok {
+			merged := make(map[string]interface{}, len(b)+len(o))
+			for k, v := range b {
+				merged[k] = v
+			}
+			for k, v := range o {
+				if existing, ok := merged[k]; ok {
+					merged[k] = mergeValue(existing, v)
+				} else {
+					merged[k] = v
+				}
+			}
+			return merged
+		}
+		return override
+	case []interface{}:
+		// Lists (other than projects, handled separately) are replaced
+		// wholesale by the override rather than merged element-wise.
+		return override
+	default:
+		return override
+	}
 }
 
 // validateConfig performs validation checks on the configuration

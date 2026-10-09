@@ -28,7 +28,7 @@ projects:
 		t.Fatalf("Failed to create test config file: %v", err)
 	}
 
-	cm, err := NewConfigManager(configPath, nil)
+	cm, err := NewConfigManager([]string{configPath}, nil)
 	if err != nil {
 		t.Fatalf("NewConfigManager failed: %v", err)
 	}
@@ -62,7 +62,7 @@ projects:
 		t.Fatalf("Failed to create test config file: %v", err)
 	}
 
-	cm, err := NewConfigManager(configPath, nil)
+	cm, err := NewConfigManager([]string{configPath}, nil)
 	if err != nil {
 		t.Fatalf("NewConfigManager failed: %v", err)
 	}
@@ -104,7 +104,7 @@ projects:
 
 	var buf bytes.Buffer
 	logger := NewLogger(&buf, "", false)
-	cm, err := NewConfigManager(configPath, logger)
+	cm, err := NewConfigManager([]string{configPath}, logger)
 	if err != nil {
 		t.Fatalf("NewConfigManager failed: %v", err)
 	}
@@ -174,7 +174,7 @@ projects:
 
 	var buf bytes.Buffer
 	logger := NewLogger(&buf, "", false)
-	cm, err := NewConfigManager(configPath, logger)
+	cm, err := NewConfigManager([]string{configPath}, logger)
 	if err != nil {
 		t.Fatalf("NewConfigManager failed: %v", err)
 	}
@@ -229,7 +229,7 @@ projects:
 
 	var buf bytes.Buffer
 	logger := NewLogger(&buf, "", false)
-	cm, err := NewConfigManager(configPath, logger)
+	cm, err := NewConfigManager([]string{configPath}, logger)
 	if err != nil {
 		t.Fatalf("NewConfigManager failed: %v", err)
 	}
@@ -284,7 +284,7 @@ projects:
 		t.Fatalf("Failed to create test config file: %v", err)
 	}
 
-	cm, err := NewConfigManager(configPath, nil)
+	cm, err := NewConfigManager([]string{configPath}, nil)
 	if err != nil {
 		t.Fatalf("NewConfigManager failed: %v", err)
 	}
@@ -351,7 +351,7 @@ projects:
 
 	var buf bytes.Buffer
 	logger := NewLogger(&buf, "", false)
-	cm, err := NewConfigManager(configPath, logger)
+	cm, err := NewConfigManager([]string{configPath}, logger)
 	if err != nil {
 		t.Fatalf("NewConfigManager failed: %v", err)
 	}
@@ -428,7 +428,7 @@ projects:
 		t.Fatalf("Failed to create test config file: %v", err)
 	}
 
-	cm, err := NewConfigManager(configPath, nil)
+	cm, err := NewConfigManager([]string{configPath}, nil)
 	if err != nil {
 		t.Fatalf("NewConfigManager failed: %v", err)
 	}
@@ -470,7 +470,7 @@ projects:
 		t.Fatalf("Failed to create test config file: %v", err)
 	}
 
-	cm, err := NewConfigManager(configPath, nil)
+	cm, err := NewConfigManager([]string{configPath}, nil)
 	if err != nil {
 		t.Fatalf("NewConfigManager failed: %v", err)
 	}
@@ -503,7 +503,7 @@ projects:
 		t.Fatalf("Failed to create test config file: %v", err)
 	}
 
-	cm, err := NewConfigManager(configPath, nil)
+	cm, err := NewConfigManager([]string{configPath}, nil)
 	if err != nil {
 		t.Fatalf("NewConfigManager failed: %v", err)
 	}

@@ -1,6 +1,8 @@
 package main
 
 import (
+	"os"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -10,9 +12,13 @@ import (
 
 // ConfigManager manages configuration with hot reload support
 type ConfigManager struct {
-	mu            sync.RWMutex
-	config        *Config
-	configPath    string
+	mu          sync.RWMutex
+	config      *Config
+	configPaths []string
+	// presentFiles records which listed config files existed at the last
+	// successful load. It is used to detect a file that disappears on reload
+	// (e.g. a secrets overlay removed or renamed) so operators are warned.
+	presentFiles  map[string]bool
 	logger        *Logger
 	watcher       *fsnotify.Watcher
 	stopChan      chan struct{}
@@ -22,21 +28,74 @@ type ConfigManager struct {
 	onReload func(*Config)
 }
 
-// NewConfigManager creates a new ConfigManager with hot reload support
-func NewConfigManager(configPath string, logger *Logger) (*ConfigManager, error) {
-	cfg, err := LoadConfig(configPath)
+// NewConfigManager creates a new ConfigManager with hot reload support.
+// It loads and merges the provided config file paths (later paths override
+// earlier ones) and watches all of them for changes.
+func NewConfigManager(configPaths []string, logger *Logger) (*ConfigManager, error) {
+	// Normalize the path list once: trim whitespace and drop empties.
+	normalized := normalizeConfigPaths(configPaths)
+
+	cfg, err := LoadMergedConfig(normalized)
 	if err != nil {
 		return nil, err
 	}
 
 	cm := &ConfigManager{
-		config:     cfg,
-		configPath: configPath,
-		logger:     logger,
-		stopChan:   make(chan struct{}),
+		config:       cfg,
+		configPaths:  normalized,
+		presentFiles: presentFiles(normalized),
+		logger:       logger,
+		stopChan:     make(chan struct{}),
 	}
 
+	// Warn once at startup if any config file is writable by group/other, which
+	// would let a local attacker create or modify an "optional" overlay and
+	// override security-critical fields (webhook_secret, execute_command).
+	warnOnInsecurePermissions(cm.configPaths, logger)
+
 	return cm, nil
+}
+
+// normalizeConfigPaths trims whitespace and removes empty entries so that
+// padded or trailing entries from a `-c` list never reach the file watcher.
+func normalizeConfigPaths(paths []string) []string {
+	normalized := make([]string, 0, len(paths))
+	for _, p := range paths {
+		p = strings.TrimSpace(p)
+		if p != "" {
+			normalized = append(normalized, p)
+		}
+	}
+	return normalized
+}
+
+// presentFiles returns the subset of paths that currently exist on disk.
+func presentFiles(paths []string) map[string]bool {
+	seen := make(map[string]bool, len(paths))
+	for _, p := range paths {
+		if _, err := os.Stat(p); err == nil {
+			seen[p] = true
+		}
+	}
+	return seen
+}
+
+// warnOnInsecurePermissions logs a warning for any config file that is writable
+// by group or others, since such a file can be tampered with to alter the
+// effective (merged) configuration.
+func warnOnInsecurePermissions(paths []string, logger *Logger) {
+	for _, p := range paths {
+		info, err := os.Stat(p)
+		if err != nil {
+			continue
+		}
+		mode := info.Mode().Perm()
+		if mode&0002 != 0 || mode&0020 != 0 {
+			if logger != nil {
+				logger.Warnf("", "Config file %s is group/other writable (mode %o); any local user could modify it and alter the merged configuration", p, mode)
+			}
+		}
+	}
 }
 
 // GetConfig returns the current configuration (thread-safe read)
@@ -74,14 +133,27 @@ func (cm *ConfigManager) StartWatcher() error {
 
 	cm.watcher = watcher
 
-	// Start watching the config file
-	if err := watcher.Add(cm.configPath); err != nil {
-		watcher.Close()
-		return err
+	// Watch only files that currently exist. Missing files (e.g. an optional
+	// secrets overlay that is not mounted) are skipped with a warning rather
+	// than aborting the whole watcher, which would otherwise disable hot reload
+	// for every file.
+	watched := make([]string, 0, len(cm.configPaths))
+	for _, p := range cm.configPaths {
+		if _, err := os.Stat(p); err != nil {
+			if cm.logger != nil {
+				cm.logger.Warnf("", "Not watching config file (not found): %s", p)
+			}
+			continue
+		}
+		if err := watcher.Add(p); err != nil {
+			watcher.Close()
+			return err
+		}
+		watched = append(watched, p)
 	}
 
 	if cm.logger != nil {
-		cm.logger.Infof("", "Hot reload enabled for config file: %s", cm.configPath)
+		cm.logger.Infof("", "Hot reload enabled for config files: %s", strings.Join(watched, ", "))
 	}
 
 	go cm.watchLoop()
@@ -142,7 +214,24 @@ func (cm *ConfigManager) reloadConfig() {
 		cm.logger.Info("", "Reloading configuration...")
 	}
 
-	newConfig, err := LoadConfig(cm.configPath)
+	// Detect config files that were present at the last load but are now
+	// missing (e.g. a secrets overlay removed or renamed). Silently skipping
+	// them would degrade the merged config (dropped webhook_secret/smtp_pass)
+	// without alerting anyone, so warn explicitly before re-merging.
+	nowPresent := presentFiles(cm.configPaths)
+	cm.mu.Lock()
+	oldPresent := cm.presentFiles
+	cm.presentFiles = nowPresent
+	cm.mu.Unlock()
+	for f := range oldPresent {
+		if !nowPresent[f] {
+			if cm.logger != nil {
+				cm.logger.Warnf("", "Config file %s is no longer present during reload; its settings (secrets, etc.) will be dropped from the merged configuration", f)
+			}
+		}
+	}
+
+	newConfig, err := LoadMergedConfig(cm.configPaths)
 	if err != nil {
 		if cm.logger != nil {
 			cm.logger.Errorf("", "Failed to reload configuration: %v", err)

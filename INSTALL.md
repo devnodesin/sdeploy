@@ -51,6 +51,18 @@ docker run -d \
   sdeploy:latest
 ```
 
+**With multiple merged config files (e.g. secrets separated from main config):**
+
+```sh
+docker run -d \
+  --name sdeploy \
+  -p 8080:8080 \
+  -v /path/to/sdeploy.conf:/etc/sdeploy.conf:ro \
+  -v /path/to/secrets.conf:/etc/secrets.conf:ro \
+  -v /var/log/sdeploy:/var/log/sdeploy \
+  sdeploy:latest -c /etc/sdeploy.conf,/etc/secrets.conf
+```
+
 **With custom working directories for deployments:**
 
 ```sh
@@ -90,8 +102,10 @@ docker run -d \
 ./sdeploy -c sdeploy.conf
 
 ## Daemon mode:
-
 ./sdeploy -c sdeploy.conf -d
+
+## Multiple merged config files (later overrides earlier):
+./sdeploy -c sdeploy.conf,secrets.conf -d
 ```
 
 ## Install as systemd Service
@@ -213,7 +227,7 @@ This eliminates manual setup steps and ensures deployments work correctly from t
 
 ## Hot Reload
 
-SDeploy automatically detects changes to the configuration file and applies them without requiring a restart.
+SDeploy automatically detects changes to the configuration file(s) and applies them without requiring a restart.
 
 ### What Gets Hot-Reloaded
 
@@ -223,10 +237,11 @@ SDeploy automatically detects changes to the configuration file and applies them
 
 ### How It Works
 
-1. SDeploy watches the config file for changes
-2. When a change is detected, the new config is validated
-3. If valid, the new config is applied immediately
-4. If invalid, the current config is preserved and an error is logged
+1. SDeploy watches every config file listed via `-c` (or the single default file) for changes
+2. When any change is detected, all listed files are re-read and re-merged
+3. The new merged config is validated
+4. If valid, the new config is applied immediately
+5. If invalid, the current config is preserved and an error is logged
 
 ### During Active Deployments
 

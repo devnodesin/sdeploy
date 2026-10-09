@@ -33,11 +33,18 @@ go build -o sdeploy ./cmd/sdeploy
 # Build
 docker build -t sdeploy:latest .
 
-# Run
+# Run (single config file)
 docker run -d -p 8080:8080 \
   -v /path/to/sdeploy.conf:/etc/sdeploy.conf:ro \
   -v /var/log/sdeploy:/var/log/sdeploy \
   sdeploy:latest
+
+# Run (multiple config files merged together, later override earlier)
+docker run -d -p 8080:8080 \
+  -v /path/to/sdeploy.conf:/etc/sdeploy.conf:ro \
+  -v /path/to/secrets.conf:/etc/secrets.conf:ro \
+  -v /var/log/sdeploy:/var/log/sdeploy \
+  sdeploy:latest -c /etc/sdeploy.conf,/etc/secrets.conf
 ```
 
 See [INSTALL.md](INSTALL.md) for detailed build, test, and deployment instructions.
@@ -48,13 +55,15 @@ See [INSTALL.md](INSTALL.md) for detailed build, test, and deployment instructio
 sdeploy [options]
 
 Options:
-  -c <path>  Path to config file (YAML format)
+  -c <list>  Comma-separated list of config files (YAML format).
+             Later files override earlier ones. When empty, falls back to
+             /etc/sdeploy.conf then ./sdeploy.conf.
   -d         Run as daemon (background service)
   -h         Show help
 ```
 
 Config file search order:
-1. Path from `-c` flag
+1. Path(s) from `-c` flag (comma-separated list, merged in order)
 2. `/etc/sdeploy.conf`
 3. `./sdeploy.conf`
 
@@ -64,6 +73,41 @@ SDeploy uses YAML format for configuration:
 
 - **[samples/sdeploy.conf](samples/sdeploy.conf)** — Minimal quick-start example
 - **[samples/sdeploy-full.conf](samples/sdeploy-full.conf)** — Full reference with all fields documented
+
+### Multiple Config Files (Merging)
+
+You can split configuration across multiple YAML files and have SDeploy merge
+them at startup using the `-c` flag with a comma-separated list:
+
+```sh
+sdeploy -c /etc/sdeploy.conf,/etc/secrets.conf
+```
+
+Files are merged **in order, left to right** — a value in a later file overrides
+the same key in an earlier file. The merge is deep:
+
+- Top-level maps and nested maps are merged key-by-key.
+- `projects` lists are matched by `webhook_path`:
+  - A project in a later file with the **same** `webhook_path` **patches** the existing project (only the fields you specify are overridden; everything else is inherited).
+  - A project with a **new** `webhook_path` is **appended** as a new project.
+  - This means you can keep projects in completely separate files and they will all be combined.
+- Scalars and other lists (e.g. `email_recipients`, `env_variables`) are replaced wholesale.
+
+A common pattern is to keep your main `sdeploy.conf` in version control while
+putting secrets (SMTP password, webhook secrets) in a separate `secrets.conf`
+that is mounted into the container or kept out of source control:
+
+```yaml
+# secrets.conf — mounted at runtime, not committed
+email_config:
+  smtp_pass: super-secret-password
+projects:
+  - webhook_secret: project-specific-secret
+```
+
+Missing or unreadable files in the list are skipped silently, so optional
+overlays can be omitted without breaking startup. If **no** valid file is found
+across the whole list, SDeploy exits with an error.
 
 | Key             | Description                                     |
 |-----------------|-------------------------------------------------|

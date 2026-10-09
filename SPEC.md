@@ -67,11 +67,11 @@ Only one deployment process runs at a time for any given project. New webhook re
 # Build
 go build -o sdeploy ./cmd/sdeploy
 
-# Console mode (foreground)
+# Console mode (foreground) — single config file
 ./sdeploy -c /path/to/sdeploy.conf
 
-# Daemon mode (background service)
-./sdeploy -c /path/to/sdeploy.conf -d
+# Daemon mode (background service) — multiple merged config files
+./sdeploy -c /etc/sdeploy.conf,/etc/secrets.conf -d
 ```
 
 ### Execution Modes
@@ -129,9 +129,33 @@ SDeploy uses YAML format for configuration.
 
 ### Config File Search Order
 
-1. Path from `-c` flag (explicit)
+1. Path(s) from `-c` flag (comma-separated list, merged in order, later overrides earlier)
 2. `/etc/sdeploy.conf`
 3. `./sdeploy.conf`
+
+### Multiple Config Files (Merging)
+
+SDeploy supports loading and merging multiple YAML configuration files via the
+`-c` flag. This is useful for separating secrets from the main configuration
+(e.g. `sdeploy.conf` + `secrets.conf`).
+
+```sh
+sdeploy -c /etc/sdeploy.conf,/etc/secrets.conf
+```
+
+**Merge semantics (in-memory, at startup):**
+
+- Files are merged **left to right**; a later file overrides an earlier one for any given key.
+- **Maps** (including nested maps) are merged key-by-key.
+- **`projects`** lists are matched by `webhook_path`:
+  - A project in a later file with the **same** `webhook_path` **patches** the existing project (only the fields you specify are overridden; everything else is inherited).
+  - A project with a **new** `webhook_path` is **appended** as a new project.
+  - This lets you keep projects in separate files and still combine them, while also allowing a later file to override individual fields of an existing project.
+- **Scalars** and other lists (e.g. `email_recipients`, `env_variables`) are replaced wholesale by the override value.
+- **Missing or unreadable** files in the list are skipped silently (optional overlays may be absent).
+- If **no** valid configuration file is found across the whole list, startup fails with an error.
+
+When `-c` is omitted, the original single-file search order (`/etc/sdeploy.conf`, `./sdeploy.conf`) is used unchanged, preserving the existing deployment workflow.
 
 ### Global Configuration
 
@@ -266,7 +290,7 @@ SDeploy performs automated pre-flight checks before each deployment.
 
 ## 🔄 Hot Reload
 
-SDeploy supports hot reloading of the configuration file without daemon restart.
+SDeploy supports hot reloading of configuration files without daemon restart.
 
 ### What Can Be Hot-Reloaded
 
@@ -283,7 +307,8 @@ SDeploy supports hot reloading of the configuration file without daemon restart.
 
 | Aspect          | Behavior                                                      |
 |-----------------|---------------------------------------------------------------|
-| Detection       | File system watcher monitors the config file                  |
+| Detection       | File system watcher monitors every config file in the `-c` list |
+| Re-merge        | On any change, all listed files are re-read and re-merged     |
 | Validation      | New configuration validated before applying                   |
 | Thread Safety   | Configuration reload is thread-safe using mutex               |
 | Build Deferral  | If deployment in progress, reload deferred until completion   |
