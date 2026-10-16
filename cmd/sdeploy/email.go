@@ -3,6 +3,7 @@ package main
 import (
 	"crypto/tls"
 	"fmt"
+	"net"
 	"net/smtp"
 	"strings"
 )
@@ -104,12 +105,30 @@ func (n *EmailNotifier) send(email *Email) error {
 	tlsConfig := &tls.Config{
 		ServerName: n.config.SMTPHost,
 	}
+	if n.config.InsecureSkipVerify {
+		// Skip CA and hostname verification (self-signed certs, e.g. an
+		// in-container SMTP relay whose cert is only valid for "localhost").
+		tlsConfig.InsecureSkipVerify = true
+		tlsConfig.ServerName = ""
+	}
 
 	// Connect to SMTP server
-	conn, err := tls.Dial("tcp", addr, tlsConfig)
-	if err != nil {
-		// Try without TLS (STARTTLS)
-		return n.sendWithSTARTTLS(addr, email, message)
+	var conn net.Conn
+	if n.config.SMTPPort == 465 {
+		// Implicit TLS (e.g. port 465): wrap the connection in TLS immediately.
+		// The port forces implicit TLS regardless of the use_tls override.
+		tlsConn, err := tls.Dial("tcp", addr, tlsConfig)
+		if err != nil {
+			return fmt.Errorf("failed to connect to SMTP server over TLS: %w", err)
+		}
+		conn = tlsConn
+	} else {
+		// Plain TCP; STARTTLS will be attempted opportunistically below.
+		plainConn, err := net.Dial("tcp", addr)
+		if err != nil {
+			return fmt.Errorf("failed to connect to SMTP server: %w", err)
+		}
+		conn = plainConn
 	}
 	defer conn.Close()
 
@@ -119,10 +138,23 @@ func (n *EmailNotifier) send(email *Email) error {
 	}
 	defer client.Close()
 
-	// Authenticate
-	auth := smtp.PlainAuth("", n.config.SMTPUser, n.config.SMTPPass, n.config.SMTPHost)
-	if err := client.Auth(auth); err != nil {
-		return fmt.Errorf("SMTP authentication failed: %w", err)
+	// Upgrade the connection to TLS via STARTTLS when enabled and supported.
+	if n.config.UseTLSEnabled() {
+		if ok, _ := client.Extension("STARTTLS"); ok {
+			if err := client.StartTLS(tlsConfig); err != nil {
+				return fmt.Errorf("failed to start TLS: %w", err)
+			}
+		}
+	}
+
+	// Authenticate only when credentials are provided.
+	if n.config.SMTPUser != "" && n.config.SMTPPass != "" {
+		auth := smtp.PlainAuth("", n.config.SMTPUser, n.config.SMTPPass, n.config.SMTPHost)
+		if err := client.Auth(auth); err != nil {
+			return fmt.Errorf("SMTP authentication failed: %w", err)
+		}
+	} else if n.config.SMTPUser != "" || n.config.SMTPPass != "" {
+		return fmt.Errorf("smtp_user and smtp_pass must be set together")
 	}
 
 	// Set sender and recipients
@@ -151,11 +183,4 @@ func (n *EmailNotifier) send(email *Email) error {
 	}
 
 	return client.Quit()
-}
-
-// sendWithSTARTTLS attempts to send using STARTTLS
-func (n *EmailNotifier) sendWithSTARTTLS(addr string, email *Email, message string) error {
-	auth := smtp.PlainAuth("", n.config.SMTPUser, n.config.SMTPPass, n.config.SMTPHost)
-
-	return smtp.SendMail(addr, auth, n.config.EmailSender, email.To, []byte(message))
 }

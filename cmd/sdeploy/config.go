@@ -33,6 +33,8 @@ type EmailConfig struct {
 	SMTPUser    string `yaml:"smtp_user"`
 	SMTPPass    string `yaml:"smtp_pass"`
 	EmailSender string `yaml:"email_sender"`
+	UseTLS      *bool  `yaml:"use_tls"`
+	InsecureSkipVerify bool `yaml:"insecure_skip_verify"`
 }
 
 // ProjectConfig holds configuration for a single project
@@ -379,14 +381,19 @@ func IsEmailConfigValid(cfg *EmailConfig) bool {
 	if cfg.SMTPPort == 0 {
 		return false
 	}
-	if cfg.SMTPUser == "" {
-		return false
-	}
-	if cfg.SMTPPass == "" {
-		return false
-	}
 	if cfg.EmailSender == "" {
 		return false
 	}
 	return true
+}
+
+// UseTLSEnabled returns whether TLS should be used for the SMTP connection.
+// It honors an explicit use_tls override, otherwise defaults based on the port:
+// port 465 implies implicit TLS (TLS negotiated on connect); all other ports use
+// opportunistic STARTTLS if the server advertises it.
+func (c *EmailConfig) UseTLSEnabled() bool {
+	if c.UseTLS != nil {
+		return *c.UseTLS
+	}
+	return c.SMTPPort == 465
 }

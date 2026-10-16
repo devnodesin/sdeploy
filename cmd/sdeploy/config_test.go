@@ -581,7 +581,7 @@ func TestIsEmailConfigValid(t *testing.T) {
 			expected: false,
 		},
 		{
-			name: "missing smtp_user",
+			name: "missing smtp_user (no-auth allowed)",
 			config: &EmailConfig{
 				SMTPHost:    "smtp.example.com",
 				SMTPPort:    587,
@@ -589,10 +589,10 @@ func TestIsEmailConfigValid(t *testing.T) {
 				SMTPPass:    "pass",
 				EmailSender: "sender@example.com",
 			},
-			expected: false,
+			expected: true,
 		},
 		{
-			name: "missing smtp_pass",
+			name: "missing smtp_pass (no-auth allowed)",
 			config: &EmailConfig{
 				SMTPHost:    "smtp.example.com",
 				SMTPPort:    587,
@@ -600,7 +600,16 @@ func TestIsEmailConfigValid(t *testing.T) {
 				SMTPPass:    "",
 				EmailSender: "sender@example.com",
 			},
-			expected: false,
+			expected: true,
+		},
+		{
+			name: "no auth (plain relay)",
+			config: &EmailConfig{
+				SMTPHost:    "smtp.example.com",
+				SMTPPort:    25,
+				EmailSender: "sender@example.com",
+			},
+			expected: true,
 		},
 		{
 			name: "missing email_sender",
