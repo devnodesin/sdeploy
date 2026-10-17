@@ -59,21 +59,18 @@ RUN apt-get update && \
     apt-get purge -y --auto-remove gnupg && \
     rm -rf /var/lib/apt/lists/*
 
-# Align with the Alpine convention (UID/GID 82) used by the official Caddy
-# image's www-data user. SDeploy writes the site files that Caddy serves, so
-# matching IDs lets the reverse proxy read them from a shared volume without
-# permission errors.
-#   - group www-data  (GID 82)
-#   - user  sdeploy   (UID 82, primary group www-data)
-RUN groupdel www-data 2>/dev/null || true; \
-    userdel  www-data 2>/dev/null || true; \
-    groupadd -g 82 -r www-data && \
-    useradd  -u 82 -r -g www-data -s /usr/sbin/nologin -d /home/sdeploy sdeploy
+# Use UID/GID 1000 for the sdeploy runtime user/group. This is the standard
+# non-root ID used in many dev/preview environments (e.g. host-mounted volumes
+# and CI runners), so files written by SDeploy keep consistent ownership.
+#   - group sdeploy  (GID 1000)
+#   - user  sdeploy  (UID 1000, primary group sdeploy)
+RUN groupadd -g 1000 -r sdeploy && \
+    useradd  -u 1000 -r -g sdeploy -s /usr/sbin/nologin -d /home/sdeploy sdeploy
 
 # Prepare directories and give the runtime user ownership.
 # Default log path is /var/log/sdeploy (see config.go Defaults.LogPath).
 RUN mkdir -p /var/log/sdeploy /home/sdeploy && \
-    chown -R sdeploy:www-data /var/log/sdeploy /home/sdeploy
+    chown -R sdeploy:sdeploy /var/log/sdeploy /home/sdeploy
 
 # Copy the static binary from the build stage.
 COPY --from=builder /build/sdeploy /usr/local/bin/sdeploy
@@ -97,7 +94,7 @@ EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
     CMD curl -s -o /dev/null --max-time 2 http://localhost:8080/ || exit 1
 
-# Run as the unprivileged sdeploy user (UID/GID 82).
+# Run as the unprivileged sdeploy user (UID/GID 1000).
 USER sdeploy
 
 ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
