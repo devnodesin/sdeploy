@@ -114,18 +114,18 @@ func (d *Deployer) Deploy(ctx context.Context, project *ProjectConfig, triggerSo
 		}
 		return result
 	}
-	
+
 	// Create a build logger for this deployment
 	var buildLogger *BuildLogger
 	if d.logger != nil {
 		buildLogger = d.logger.NewBuildLogger(project.Name)
 	}
-	
+
 	defer func() {
 		// Close the build logger with the result status
 		if buildLogger != nil {
 			buildLogger.Close(result.Success && !result.Skipped)
-			
+
 			// Log final status to main.log after build logger is closed
 			if d.logger != nil && !result.Skipped {
 				finalLogPath := buildLogger.GetFinalPath()
@@ -190,7 +190,7 @@ func (d *Deployer) Deploy(ctx context.Context, project *ProjectConfig, triggerSo
 			d.sendNotification(project, &result, triggerSource)
 			return result
 		}
-		
+
 		// Check if we should skip build due to no changes
 		// Only skip if:
 		// 1. No changes detected AND
@@ -307,7 +307,7 @@ func (d *Deployer) handleGitOperations(ctx context.Context, project *ProjectConf
 		if buildLogger != nil {
 			buildLogger.Infof(project.Name, "Cloned repository to %s", project.LocalPath)
 		}
-		
+
 		// After cloning, verify we're on the correct branch
 		// (the clone uses --branch flag, but we should verify)
 		if err := d.ensureCorrectBranch(ctx, project, buildLogger); err != nil {
@@ -322,7 +322,7 @@ func (d *Deployer) handleGitOperations(ctx context.Context, project *ProjectConf
 		if buildLogger != nil {
 			buildLogger.Infof(project.Name, "Repository already cloned at %s", project.LocalPath)
 		}
-		
+
 		// Ensure we're on the correct branch before pulling or executing commands
 		if err := d.ensureCorrectBranch(ctx, project, buildLogger); err != nil {
 			if buildLogger != nil {
@@ -330,7 +330,7 @@ func (d *Deployer) handleGitOperations(ctx context.Context, project *ProjectConf
 			}
 			return false, fmt.Errorf("failed to checkout configured branch: %v", err)
 		}
-		
+
 		// Check if we should do git pull
 		if project.GitUpdate {
 			// Get current commit SHA before pull
@@ -342,7 +342,7 @@ func (d *Deployer) handleGitOperations(ctx context.Context, project *ProjectConf
 				// Continue with pull even if we can't get SHA
 				beforeSHA = ""
 			}
-			
+
 			if err := d.gitPull(ctx, project, buildLogger); err != nil {
 				if buildLogger != nil {
 					buildLogger.Errorf(project.Name, "Git pull failed: %v", err)
@@ -352,7 +352,7 @@ func (d *Deployer) handleGitOperations(ctx context.Context, project *ProjectConf
 			if buildLogger != nil {
 				buildLogger.Infof(project.Name, "Executed git pull")
 			}
-			
+
 			// Get current commit SHA after pull
 			afterSHA, err := getCurrentCommitSHA(ctx, project.LocalPath)
 			if err != nil {
@@ -362,7 +362,7 @@ func (d *Deployer) handleGitOperations(ctx context.Context, project *ProjectConf
 				// If we can't determine, assume there were changes to be safe
 				return true, nil
 			}
-			
+
 			// Check if there were changes
 			hasChanges := beforeSHA != afterSHA
 			if buildLogger != nil {
@@ -402,7 +402,7 @@ func getCurrentBranch(ctx context.Context, repoPath string) (string, error) {
 	cmd := exec.CommandContext(ctx, "git", "rev-parse", "--abbrev-ref", "HEAD")
 	cmd.Dir = repoPath
 
-	output, err := cmd.CombinedOutput()
+	output, err := runCombinedOutput(cmd)
 	if err != nil {
 		return "", fmt.Errorf("%v: %s", err, string(output))
 	}
@@ -417,7 +417,7 @@ func getCurrentCommitSHA(ctx context.Context, repoPath string) (string, error) {
 	cmd := exec.CommandContext(ctx, "git", "rev-parse", "HEAD")
 	cmd.Dir = repoPath
 
-	output, err := cmd.CombinedOutput()
+	output, err := runCombinedOutput(cmd)
 	if err != nil {
 		return "", fmt.Errorf("%v: %s", err, string(output))
 	}
@@ -443,7 +443,7 @@ func isValidGitRepo(ctx context.Context, repoPath string) bool {
 	// Use exec.Command directly with separate arguments for consistency and security
 	cmd := exec.CommandContext(ctx, "git", "rev-parse", "--git-dir")
 	cmd.Dir = repoPath
-	err := cmd.Run()
+	err := runCommand(cmd)
 	return err == nil
 }
 
@@ -508,7 +508,7 @@ func (d *Deployer) gitCheckout(ctx context.Context, project *ProjectConfig, buil
 		cmd.Env = append(os.Environ(), fmt.Sprintf("GIT_SSH_COMMAND=%s", buildGitSSHCommand(project.GitSSHKeyPath)))
 	}
 
-	output, err := cmd.CombinedOutput()
+	output, err := runCombinedOutput(cmd)
 
 	if buildLogger != nil && len(output) > 0 {
 		buildLogger.Infof(project.Name, "Output: %s", strings.TrimSpace(string(output)))
@@ -537,7 +537,7 @@ func (d *Deployer) gitResetHard(ctx context.Context, project *ProjectConfig, bui
 	setProcessGroup(cmd)
 	cmd.Dir = project.LocalPath
 
-	output, err := cmd.CombinedOutput()
+	output, err := runCombinedOutput(cmd)
 
 	if buildLogger != nil && len(output) > 0 {
 		buildLogger.Infof(project.Name, "Output: %s", strings.TrimSpace(string(output)))
@@ -574,7 +574,7 @@ func (d *Deployer) gitClone(ctx context.Context, project *ProjectConfig, buildLo
 		cmd.Env = append(os.Environ(), fmt.Sprintf("GIT_SSH_COMMAND=%s", buildGitSSHCommand(project.GitSSHKeyPath)))
 	}
 
-	output, err := cmd.CombinedOutput()
+	output, err := runCombinedOutput(cmd)
 
 	if buildLogger != nil && len(output) > 0 {
 		buildLogger.Infof(project.Name, "Output: %s", strings.TrimSpace(string(output)))
@@ -612,7 +612,7 @@ func (d *Deployer) gitPull(ctx context.Context, project *ProjectConfig, buildLog
 		cmd.Env = append(os.Environ(), fmt.Sprintf("GIT_SSH_COMMAND=%s", buildGitSSHCommand(project.GitSSHKeyPath)))
 	}
 
-	output, err := cmd.CombinedOutput()
+	output, err := runCombinedOutput(cmd)
 
 	if buildLogger != nil && len(output) > 0 {
 		buildLogger.Infof(project.Name, "Output: %s", strings.TrimSpace(string(output)))
@@ -672,10 +672,16 @@ func (d *Deployer) executeCommand(ctx context.Context, project *ProjectConfig, t
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 
-	// Start the command
 	if err := cmd.Start(); err != nil {
 		return "", err
 	}
+	registerChild(cmd.Process.Pid)
+	defer unregisterChild(cmd.Process.Pid)
+
+	// Bound Wait so a descendant that escapes the process group (e.g. setsid)
+	// and keeps an inherited pipe open cannot block Wait forever, which would
+	// otherwise pin this project's lock and goroutine indefinitely.
+	cmd.WaitDelay = reapWaitDelay
 
 	// Wait for command completion or context cancellation
 	done := make(chan error, 1)
@@ -730,18 +736,18 @@ func shouldSkipBuildOnNoChanges(triggerSource string) bool {
 		// Not a webhook (e.g., INTERNAL), so don't skip - always build
 		return false
 	}
-	
+
 	// It's a WEBHOOK trigger, check the specific source
 	if strings.Contains(triggerSource, "(Github)") {
 		// GitHub push webhook - skip on no changes
 		return true
 	}
-	
+
 	if strings.Contains(triggerSource, "(unknown)") || triggerSource == "WEBHOOK" {
 		// Unknown source or no source specified - skip for safety
 		return true
 	}
-	
+
 	// For any other webhook source (e.g., "WEBHOOK (Jenkins)", "WEBHOOK (GitLab)"), don't skip
 	return false
 }

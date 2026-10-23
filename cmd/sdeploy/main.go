@@ -82,6 +82,11 @@ func main() {
 
 	logger.Infof("", "%s %s - Service started", ServiceName, Version)
 
+	// Reap orphaned child processes. When sdeploy runs as PID 1 (e.g. in the
+	// container image), descendants of build commands are reparented to it and
+	// must be reaped or they accumulate as zombies.
+	startChildReaper(logger)
+
 	// Log configuration summary
 	logConfigSummary(logger, cfg, *daemonMode)
 
