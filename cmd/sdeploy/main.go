@@ -210,7 +210,13 @@ func logConfigSummary(logger *Logger, cfg *Config, daemonMode bool) {
 			logger.Infof("", "  - Env Variables: %d configured", len(project.EnvVariables))
 		}
 		if project.TimeoutSeconds > 0 {
-			logger.Infof("", "  - Timeout: %ds", project.TimeoutSeconds)
+			if project.timeoutUsesDefault {
+				logger.Warnf("", "  - Timeout: %ds (no timeout_seconds set in config; using %d-minute default safety timeout)", project.TimeoutSeconds, Defaults.TimeoutSeconds/60)
+			} else {
+				logger.Infof("", "  - Timeout: %ds", project.TimeoutSeconds)
+			}
+		} else if project.TimeoutSeconds < 0 {
+			logger.Infof("", "  - Timeout: unlimited (explicit opt-out; no command timeout applied)")
 		}
 		logger.Infof("", "  - Email Recipients: %d", len(project.EmailRecipients))
 		logger.Infof("", "-------------------------------------------------------")

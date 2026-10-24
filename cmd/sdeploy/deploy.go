@@ -691,10 +691,16 @@ func (d *Deployer) executeCommand(ctx context.Context, project *ProjectConfig, t
 
 	select {
 	case <-ctx.Done():
-		// Kill the entire process group
+		// Kill the entire process group so no descendant survives the timeout.
+		if buildLogger != nil {
+			buildLogger.Errorf(project.Name, "Command exceeded timeout of %d seconds; killing process group", project.TimeoutSeconds)
+		}
+		if d.logger != nil {
+			d.logger.Errorf(project.Name, "Deployment killed: command exceeded timeout of %d seconds", project.TimeoutSeconds)
+		}
 		killProcessGroup(cmd)
 		<-done // Wait for the process to actually exit
-		return stdout.String() + stderr.String(), fmt.Errorf("command timed out after %d seconds", project.TimeoutSeconds)
+		return stdout.String() + stderr.String(), fmt.Errorf("command timed out after %d seconds and was killed", project.TimeoutSeconds)
 	case err := <-done:
 		output := stdout.String()
 		if stderr.Len() > 0 {

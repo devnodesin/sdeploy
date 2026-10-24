@@ -11,13 +11,15 @@ import (
 // Defaults holds all default configuration values in a single struct
 // Access via: Defaults.Port, Defaults.LogPath, etc.
 var Defaults = struct {
-	Port      int
-	LogPath   string
-	GitBranch string
+	Port           int
+	LogPath        string
+	GitBranch      string
+	TimeoutSeconds int
 }{
-	Port:      8080,
-	LogPath:   "/var/log/sdeploy",
-	GitBranch: "main",
+	Port:           8080,
+	LogPath:        "/var/log/sdeploy",
+	GitBranch:      "main",
+	TimeoutSeconds: 900, // 15 minutes: safety net so a hung command cannot pin a project lock forever
 }
 
 // ConfigSearchPaths defines the search order for config files
@@ -50,8 +52,17 @@ type ProjectConfig struct {
 	EnvVariables    []string `yaml:"env_variables"`
 	GitUpdate       bool     `yaml:"git_update"`
 	GitSSHKeyPath   string   `yaml:"git_ssh_key_path"`
+	// TimeoutSeconds is the per-command timeout in seconds. A value of 0 (or
+	// omitted) falls back to Defaults.TimeoutSeconds as a safety net so a hung
+	// command cannot pin the project lock forever. A negative value (e.g. -1)
+	// is an explicit opt-out meaning "unlimited": no timeout is applied.
 	TimeoutSeconds  int      `yaml:"timeout_seconds"`
 	EmailRecipients []string `yaml:"email_recipients"`
+
+	// timeoutUsesDefault is set by finalizeConfig when TimeoutSeconds was
+	// omitted from the config so the startup log can flag the fallback. It is
+	// not a YAML field.
+	timeoutUsesDefault bool
 }
 
 // Config holds the complete SDeploy configuration
@@ -146,6 +157,18 @@ func LoadMergedConfig(paths []string) (*Config, error) {
 func finalizeConfig(cfg *Config) error {
 	if cfg.ListenPort == 0 {
 		cfg.ListenPort = Defaults.Port
+	}
+	// Apply a default command timeout to any project that did not set one.
+	// Without a timeout a hung execute_command would pin the project lock
+	// (and the active-builds counter) indefinitely. The fallback keeps
+	// sdeploy from getting stuck while still allowing an explicit override.
+	// A negative TimeoutSeconds (-1) is an intentional opt-out for "unlimited"
+	// and is left untouched so executeCommand skips the timeout entirely.
+	for i := range cfg.Projects {
+		if cfg.Projects[i].TimeoutSeconds == 0 {
+			cfg.Projects[i].TimeoutSeconds = Defaults.TimeoutSeconds
+			cfg.Projects[i].timeoutUsesDefault = true
+		}
 	}
 	return validateConfig(cfg)
 }
@@ -295,6 +318,12 @@ func validateConfig(cfg *Config) error {
 			if err := validateSSHKeyPath(project.GitSSHKeyPath); err != nil {
 				return fmt.Errorf("project %d (%s): %v", i+1, project.Name, err)
 			}
+		}
+
+		// Only -1 is a valid negative value: it is the explicit opt-out for an
+		// unlimited command timeout. Any other negative value is a config error.
+		if project.TimeoutSeconds < -1 {
+			return fmt.Errorf("project %d (%s): timeout_seconds must be >= 0 or -1 (unlimited), got %d", i+1, project.Name, project.TimeoutSeconds)
 		}
 	}
 
